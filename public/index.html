@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en" data-theme="auto">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ephesian</title>
+  <meta name="color-scheme" content="light dark" />
+  <link rel="icon" type="image/svg+xml" href="/icons/logo.svg" />
+  <link rel="stylesheet" href="/css/styles.css" />
+  <script>
+    // Apply persisted theme before paint to prevent flash.
+    (function(){
+      try {
+        var t = localStorage.getItem('ephesian.theme') || 'auto';
+        document.documentElement.dataset.theme = t;
+      } catch(e){}
+    })();
+  </script>
+</head>
+<body>
+  <a href="#main" class="skip-link">Skip to main content</a>
+  <header id="app-header" class="app-header">
+    <a href="/" class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+        <path d="M6 4 H26 V8 H10 V14 H22 V18 H10 V24 H26 V28 H6 Z" fill="currentColor"/>
+      </svg>
+      <span class="brand-name">Ephesian</span>
+    </a>
+    <nav class="app-nav" aria-label="Account and settings">
+      <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Theme" title="Theme">
+        <span class="theme-icon" aria-hidden="true"></span>
+      </button>
+      <div class="auth-slot" id="auth-slot"></div>
+    </nav>
+  </header>
+  <div id="route-announcer" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+  <main id="main" class="app-main" tabindex="-1" aria-label="Main content"></main>
+  <div id="toast-region" class="toast-region" aria-live="polite"></div>
+  <div id="modal-root"></div>
+  <script type="module" src="/dist/main.js"></script>
+</body>
+</html>
