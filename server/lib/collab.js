@@ -22,7 +22,7 @@ class CollabDoc {
     this.ydoc = new Y.Doc();
     this.awareness = new awarenessProtocol.Awareness(this.ydoc);
     this.awareness.setLocalState(null);
-    /** @type {Map<WebSocket, {userId, displayName, role, color, awarenessIds: Set<number>}>} */
+    /** @type {Map<WebSocket, {userId, displayName, role, color, isGuest, awarenessIds: Set<number>}>} */
     this.conns = new Map();
     this.persistTimer = null;
 
@@ -103,7 +103,8 @@ class CollabDoc {
         userId: meta.userId,
         displayName: meta.displayName,
         role: meta.role,
-        color: meta.color
+        color: meta.color,
+        isGuest: !!meta.isGuest
       });
     }
     const summary = JSON.stringify({
@@ -260,6 +261,7 @@ export function attachCollabServer(httpServer) {
         displayName: session.user.displayName,
         role,
         color: colorFor(session.userId),
+        isGuest: !!session.user.isGuest,
         awarenessIds: new Set()
       };
       doc.conns.set(ws, meta);

@@ -29,6 +29,9 @@ function getSessionFromReq(req) {
 function requireSessionAny(req, res) {
   const session = getSessionFromReq(req);
   if (!session) { res.status(401).json({ error: 'auth_required' }); return null; }
+  // Guests have no email, no password, and no way to be re-authenticated next time;
+  // exposing 2FA enrolment endpoints to them would be meaningless.
+  if (session.user?.isGuest) { res.status(403).json({ error: 'guests_not_allowed' }); return null; }
   return session;
 }
 

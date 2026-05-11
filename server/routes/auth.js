@@ -111,6 +111,7 @@ router.post('/resend-verification', async (req, res) => {
   const sid = readSessionCookie(req);
   const session = sid ? getSession(sid) : null;
   if (!session) return res.status(401).json({ error: 'auth_required' });
+  if (session.user?.isGuest) return res.status(403).json({ error: 'guests_not_allowed' });
   const rl = checkRateLimit(`resend:${session.userId}`, { max: 5, windowMs: 60 * 60 * 1000 });
   if (!rl.allowed) return res.status(429).json({ error: 'too_many_attempts' });
   const user = db.prepare('SELECT id, email, email_verified FROM users WHERE id = ?').get(session.userId);
@@ -178,6 +179,7 @@ router.get('/me', (req, res) => {
 
 router.post('/change-password', express.json(), async (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'auth_required' });
+  if (req.user.isGuest) return res.status(403).json({ error: 'guests_not_allowed' });
   const { currentPassword, newPassword } = req.body || {};
   const user = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.id);
   if (!user) return res.status(401).json({ error: 'auth_required' });

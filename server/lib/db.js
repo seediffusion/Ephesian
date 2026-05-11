@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS users (
   totp_enabled INTEGER NOT NULL DEFAULT 0,
   email_2fa_enabled INTEGER NOT NULL DEFAULT 0,
   backup_codes_json TEXT,
+  is_guest INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
   last_login_at INTEGER
 );
@@ -93,7 +94,8 @@ CREATE TABLE IF NOT EXISTS invite_links (
   expires_at INTEGER,
   max_uses INTEGER NOT NULL DEFAULT 0,
   uses INTEGER NOT NULL DEFAULT 0,
-  revoked INTEGER NOT NULL DEFAULT 0
+  revoked INTEGER NOT NULL DEFAULT 0,
+  allow_guests INTEGER NOT NULL DEFAULT 1
 );
 CREATE INDEX IF NOT EXISTS idx_invites_doc ON invite_links(document_id);
 
@@ -117,6 +119,18 @@ CREATE TABLE IF NOT EXISTS rate_limits (
 );
 `);
 
+// ----- Schema migrations (idempotent) -----
+// `CREATE TABLE IF NOT EXISTS` does not alter existing tables, so we add new
+// columns via PRAGMA + ALTER. Safe to run on a fresh DB or an existing one.
+function ensureColumn(table, column, definition) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (!cols.some(c => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+}
+ensureColumn('users', 'is_guest', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('invite_links', 'allow_guests', 'INTEGER NOT NULL DEFAULT 1');
+
 export function nowMs() { return Date.now(); }
 
 export function pruneExpired() {
@@ -125,6 +139,13 @@ export function pruneExpired() {
   db.prepare('DELETE FROM email_tokens WHERE expires_at < ?').run(now);
   db.prepare('DELETE FROM webauthn_challenges WHERE expires_at < ?').run(now);
   db.prepare('DELETE FROM rate_limits WHERE reset_at < ?').run(now);
+  // Guest users have no further sessions once their original session expires;
+  // garbage-collect them so the users table doesn't grow indefinitely.
+  db.prepare(`
+    DELETE FROM users
+     WHERE is_guest = 1
+       AND id NOT IN (SELECT user_id FROM sessions)
+  `).run();
 }
 setInterval(pruneExpired, 5 * 60 * 1000).unref();
 pruneExpired();

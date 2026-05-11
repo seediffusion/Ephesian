@@ -377,8 +377,36 @@ input:focus, textarea:focus, select:focus, button:focus-visible, a:focus-visible
   color: #fff;
   border: 2px solid var(--color-panel);
   margin-left: -0.4rem;
+  position: relative;
 }
 .presence-avatar:first-child { margin-left: 0; }
+/* Guests get two redundant non-colour cues so the distinction does not rely on
+   any single visual property and contrast is guaranteed regardless of the
+   randomly-assigned avatar fill colour:
+   1) a dashed border in the panel colour (matches the gap to neighbours)
+   2) a small "G" badge in the bottom-right corner with panel-coloured ring
+   The badge is a real DOM element rather than a pseudo-element because some
+   screen readers (VoiceOver, TalkBack) include ::before/::after `content` in
+   the accessible name. The DOM element carries aria-hidden so it is never
+   announced; the only spoken cue remains the sr-only "(guest)" text. */
+.presence-avatar.is-guest {
+  border-style: dashed;
+}
+.presence-avatar .guest-badge {
+  position: absolute;
+  right: -0.25rem;
+  bottom: -0.25rem;
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 50%;
+  font-size: 0.55rem;
+  font-weight: 700;
+  line-height: 0.85rem;
+  text-align: center;
+  background: var(--color-panel);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-strong);
+}
 
 .editor-toolbar {
   display: flex; flex-wrap: wrap; gap: 0.25rem; padding: 0.4rem 0.5rem;

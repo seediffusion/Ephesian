@@ -1,6 +1,7 @@
-import { h, toast, announceRoute } from '../ui.js';
-import { api, fetchMe, meUser } from '../api.js';
+import { h, toast, announceRoute, busy, openModal, nextId } from '../ui.js';
+import { api, fetchMe, meUser, clearMeCache } from '../api.js';
 import { navigate } from '../router.js';
+import { renderAuthSlot } from '../auth-slot.js';
 
 export async function renderLinkInvite(main, params) {
   main.innerHTML = '';
@@ -23,42 +24,178 @@ export async function renderLinkInvite(main, params) {
     'You can join "', h('strong', {}, [info.document.title || 'Untitled']),
     '" as a ', h('strong', {}, [info.role]), '.'
   ]));
-  if (!user) {
-    card.appendChild(h('p', {}, [
-      'Sign in or create an account to accept the invitation.'
-    ]));
-    card.appendChild(h('div', { style: { display: 'flex', gap: '0.5rem', flexWrap: 'wrap' } }, [
-      h('a', {
-        class: 'btn btn-primary', 'data-link': '',
-        href: '/register?next=' + encodeURIComponent('/invite/link/' + params.token)
-      }, ['Create account']),
-      h('a', {
-        class: 'btn', 'data-link': '',
-        href: '/login?next=' + encodeURIComponent('/invite/link/' + params.token)
-      }, ['Sign in'])
-    ]));
+
+  // ---- Already signed in (full account) — accept directly ----
+  if (user && !user.isGuest) {
+    if (!user.emailVerified) {
+      card.appendChild(h('div', { class: 'callout warning', role: 'status' }, [
+        'Verify your email before accepting invitations. ',
+        h('a', { href: '/verify', 'data-link': '' }, ['Verify now'])
+      ]));
+      announceRoute('You have been invited — verify your email first');
+      return;
+    }
+    const accept = h('button', { type: 'button', class: 'btn btn-primary' }, ['Accept and open document']);
+    accept.addEventListener('click', async (e) => {
+      busy(accept, true);
+      try {
+        const r = await api('/api/invites/link/' + params.token + '/accept', { method: 'POST' });
+        navigate('/d/' + r.documentId);
+      } catch (err) {
+        toast('Could not accept invitation: ' + (err.message || ''), 'error');
+      } finally { busy(accept, false); }
+    });
+    card.appendChild(accept);
     announceRoute('You have been invited');
     return;
   }
-  if (!user.emailVerified) {
-    card.appendChild(h('div', { class: 'callout warning', role: 'status' }, [
-      'Verify your email before accepting invitations. ',
-      h('a', { href: '/verify', 'data-link': '' }, ['Verify now'])
-    ]));
-    announceRoute('You have been invited — verify your email first');
+
+  // ---- Already signed in as a guest somewhere else — accept directly too ----
+  if (user && user.isGuest) {
+    const accept = h('button', { type: 'button', class: 'btn btn-primary' }, ['Accept and open document']);
+    accept.addEventListener('click', async () => {
+      busy(accept, true);
+      try {
+        const r = await api('/api/invites/link/' + params.token + '/accept', { method: 'POST' });
+        navigate('/d/' + r.documentId);
+      } catch (err) {
+        toast('Could not accept invitation: ' + (err.message || ''), 'error');
+      } finally { busy(accept, false); }
+    });
+    card.appendChild(accept);
+    announceRoute('You have been invited');
     return;
   }
-  const accept = h('button', { type: 'button', class: 'btn btn-primary' }, ['Accept and open document']);
-  accept.addEventListener('click', async () => {
-    try {
-      const r = await api('/api/invites/link/' + params.token + '/accept', { method: 'POST' });
-      navigate('/d/' + r.documentId);
-    } catch (e) {
-      toast('Could not accept invitation: ' + (e.message || ''), 'error');
-    }
-  });
-  card.appendChild(accept);
+
+  // ---- Not signed in: offer guest join (if allowed) AND/OR sign-in/register ----
+  if (info.allowGuests) {
+    card.appendChild(h('p', {}, [
+      'You can join immediately as a guest using a display name, or sign in / create an account if you have one.'
+    ]));
+    card.appendChild(h('div', {
+      style: { display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }
+    }, [
+      h('button', {
+        type: 'button',
+        class: 'btn btn-primary',
+        'aria-haspopup': 'dialog',
+        onclick: () => promptGuestJoin(params.token)
+      }, ['Join as a guest']),
+      h('a', {
+        class: 'btn',
+        'data-link': '',
+        href: '/login?next=' + encodeURIComponent('/invite/link/' + params.token)
+      }, ['Sign in']),
+      h('a', {
+        class: 'btn btn-ghost',
+        'data-link': '',
+        href: '/register?next=' + encodeURIComponent('/invite/link/' + params.token)
+      }, ['Create an account'])
+    ]));
+    card.appendChild(h('p', { class: 'field-help' }, [
+      'Guest access lasts for this browser session only. Signing in or creating an account lets you come back later.'
+    ]));
+    announceRoute('You have been invited. Choose how to join.');
+    return;
+  }
+
+  // ---- Guests not allowed for this link ----
+  card.appendChild(h('p', {}, [
+    'The owner of this document requires collaborators to have an Ephesian account. Sign in or create one to join.'
+  ]));
+  card.appendChild(h('div', { style: { display: 'flex', gap: '0.5rem', flexWrap: 'wrap' } }, [
+    h('a', {
+      class: 'btn btn-primary',
+      'data-link': '',
+      href: '/register?next=' + encodeURIComponent('/invite/link/' + params.token)
+    }, ['Create account']),
+    h('a', {
+      class: 'btn',
+      'data-link': '',
+      href: '/login?next=' + encodeURIComponent('/invite/link/' + params.token)
+    }, ['Sign in'])
+  ]));
   announceRoute('You have been invited');
+}
+
+function promptGuestJoin(token) {
+  const inputId = nextId('guest-name');
+  const errId = nextId('guest-err');
+  const input = h('input', {
+    type: 'text',
+    id: inputId,
+    autocomplete: 'nickname',
+    maxlength: '60',
+    required: true,
+    placeholder: 'Your name as it will appear to others'
+  });
+  const err = h('div', {
+    id: errId,
+    class: 'field-error',
+    role: 'alert',
+    'aria-live': 'assertive',
+    hidden: true
+  });
+  const ok = h('button', { type: 'submit', class: 'btn btn-primary' }, ['Join document']);
+  const cancel = h('button', {
+    type: 'button',
+    class: 'btn',
+    onclick: () => m.close()
+  }, ['Cancel']);
+
+  const form = h('form', {
+    onsubmit: async (e) => {
+      e.preventDefault();
+      err.hidden = true;
+      input.removeAttribute('aria-invalid');
+      const displayName = input.value.trim();
+      if (!displayName) {
+        err.textContent = 'Enter a display name to continue.';
+        err.hidden = false;
+        input.setAttribute('aria-invalid', 'true');
+        input.focus();
+        return;
+      }
+      busy(ok, true);
+      try {
+        const r = await api('/api/invites/link/' + token + '/guest', {
+          method: 'POST',
+          body: { displayName }
+        });
+        clearMeCache();
+        await renderAuthSlot();
+        m.close();
+        navigate('/d/' + r.documentId);
+      } catch (e2) {
+        err.textContent =
+          e2.data?.error === 'guests_not_allowed' ? 'The owner of this link does not allow guest access.' :
+          e2.data?.error === 'display_name_required' ? 'Enter a display name to continue.' :
+          e2.data?.error === 'expired' ? 'This invite link has expired.' :
+          e2.data?.error === 'exhausted' ? 'This invite link has reached its maximum uses.' :
+          e2.data?.error === 'too_many_attempts' ? 'Too many guest join attempts. Please wait a few minutes.' :
+          (e2.message || 'Could not join as a guest.');
+        err.hidden = false;
+        input.setAttribute('aria-invalid', 'true');
+        input.focus();
+      } finally { busy(ok, false); }
+    }
+  }, [
+    h('div', { class: 'field' }, [
+      h('label', { class: 'field-label', for: inputId }, ['Display name']),
+      input,
+      h('p', { class: 'field-help' }, [
+        'This is what other collaborators will see next to your cursor.'
+      ])
+    ]),
+    err
+  ]);
+
+  const m = openModal({
+    title: 'Join as a guest',
+    body: form,
+    footer: [cancel, ok],
+    initialFocus: input
+  });
 }
 
 export async function renderEmailInvite(main, params) {
@@ -77,6 +214,13 @@ export async function renderEmailInvite(main, params) {
       h('a', { class: 'btn', 'data-link': '', href: '/login?next=' + encodeURIComponent('/invite/email/' + params.token) }, ['Sign in'])
     ]));
     announceRoute('You have been invited');
+    return;
+  }
+  if (user.isGuest) {
+    card.appendChild(h('div', { class: 'callout warning', role: 'status' }, [
+      'Email invitations require a full Ephesian account so we can match your email address. Sign in or create an account to accept.'
+    ]));
+    announceRoute('You have been invited — full account required');
     return;
   }
   if (!user.emailVerified) {
