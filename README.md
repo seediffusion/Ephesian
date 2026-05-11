@@ -1,11 +1,12 @@
 # Ephesian
 
-The simple, self-hostable document collaboration server that takes accessibility seriously.
-Ephesian is a Google-Docs-style platform you run on your own machine or server. It pairs real-time co-editing with a web interface that has been audited for screen readers such as [NVDA](https://nvaccess.org/about-nvda/) and JAWS, light and dark mode, full keyboard operation, and standards-based two-factor authentication. There is no external service to sign up for, no database to install, and no telemetry. Everything lives in one Node.js process and a single SQLite file.
+Document collaboration that unifies and empowers.
+
+Ephesian is a Google-Docs-style platform you can run on your own machine or server. It pairs real-time co-editing with a web interface that has been audited for screen readers such as [NVDA](https://nvaccess.org/about-nvda/) and JAWS, light and dark mode, full keyboard operation, and standards-based two-factor authentication. There is no external service to sign up for, no database to install, and no telemetry. Everything lives in one Node.js process and a single SQLite file.
 
 ## Why "Ephesian"?
 
-The name is borrowed from the New Testament Letter to the Ephesians, which  teaches unity of the Jews and the Gentiles through Jesus Christ. The project has nothing to do with religion; the theme is simply that a collaboration tool aims to unify everyone around a shared project idea.
+The name is borrowed from the New Testament Letter to the Ephesians, which  teaches unity of the Jews and the Gentiles (non-Jews) through Jesus Christ. The project has nothing to do with religion; the theme is simply that a collaboration tool aims to unify everyone around a shared project idea.
 
 ## Ephesian features
 
@@ -21,7 +22,7 @@ Ephesian is written in JavaScript and uses [Node.js](https://nodejs.org/), versi
 2. Open a terminal. On Windows, press Windows + R, type powershell, and press Enter.
 3. Clone this repository with git by running the following command.
 ```
-git clone https://github.com/seedy60/ephesian.git
+git clone https://github.com/seediffusion/ephesian.git
 ```
 4. Move into the Ephesian folder and install the libraries needed for Ephesian.
 ```
@@ -111,11 +112,21 @@ If the recipient already has an Ephesian account, they gain access immediately a
 Invite links work even when you do not know the recipient's email address.
 
 1. Open the document and press the Share button.
-2. In the Invite links section, choose Editor or Viewer, optionally set a maximum number of uses (0 means unlimited), and press Create invite link.
+2. In the Invite links section, choose Editor or Viewer, optionally set a maximum number of uses (0 means unlimited), and decide whether to allow joining as a guest (see below). Press Create invite link.
 3. The link is created and copied to your clipboard automatically.
 4. Share the link however you like (chat, email, paper).
 
-Anyone who opens the link will be asked to sign in or create an account before joining. You can revoke a link from the same dialog at any time. Revoking does not remove people who have already accepted; it only stops new people from using the link.
+You can revoke a link from the same dialog at any time. Revoking does not remove people who have already accepted; it only stops new people from using the link.
+
+### Guest access
+
+By default, anyone who opens an invite link can join the document immediately as a **guest** by entering a display name. They do not need an Ephesian account, an email address, or a password. Guests get the role chosen on the invite link (editor or viewer) and behave exactly like any other collaborator while they are connected, including showing up in the presence list (with a dashed avatar border and a small "G" badge) and counting toward the document's collaborator limit. Screen readers announce guests as "Name (editor, guest)" or similar.
+
+Guest access is per-link. When you create or look at an invite link in the Share dialog, you will see whether it allows guests or requires an account. To require an account for a specific link, uncheck "Allow joining as a guest (no account required)" when creating it. Existing links can be revoked and replaced if you change your mind.
+
+A guest session lasts for the browser session only. If a guest closes the tab, returns the next day, and opens the same link, they re-enter their display name and start a fresh guest session. Their previous in-document edits are preserved in the document itself — they just no longer have access through that earlier guest identity. If a guest wants to come back as themselves later, they can press Create an account in the header at any time during their guest session.
+
+Guests cannot create their own documents, cannot share documents they have been invited to, cannot manage 2FA, and cannot accept email-based invitations (those are tied to the email address the invitation was sent to). Email invitations always require a full account.
 
 ## Setting a collaborator limit
 
@@ -127,7 +138,7 @@ To set or change a document's limit:
 2. Scroll to the Capacity limit section.
 3. Enter a number and press the Update button.
 
-Tabs from the same user count as one person, so opening a document in two browser tabs does not consume two slots.
+Tabs from the same user count as one person, so opening a document in two browser tabs does not consume two slots. Each guest counts as a separate person because their session is scoped to that one browser tab.
 
 ## Importing and exporting
 
@@ -151,7 +162,7 @@ If you close the tab while offline, your changes are still saved locally and wil
 
 ## Two-factor authentication
 
-To turn on two-factor authentication, open the user menu in the top right and choose your name, then scroll to the Two-factor authentication section. SMS is intentionally not supported.
+To turn on two-factor authentication, select your name in the top right of the header to open your account page, then scroll to the Two-factor authentication section. SMS is intentionally not supported.
 
 * **Authenticator app (TOTP)**: press Enable, scan the QR code with an authenticator app such as Aegis, 1Password, Bitwarden, or Google Authenticator, then enter the 6-digit code the app generates to confirm. Ephesian also generates 10 one-time backup codes on first set-up. Save them — they can be used to sign in if you lose access to your authenticator.
 * **Security key or passkey (WebAuthn)**: press Add a key, give the key a name, and follow your browser's prompts. This works with hardware keys such as YubiKeys, with platform passkeys (Windows Hello, Touch ID, Android), and with passkey-syncing password managers.
@@ -184,7 +195,18 @@ Re-run `npm run setup` to be guided through these settings in plain English.
 
 ## Accessibility
 
-The user interface has been audited for WCAG 2.2 AA compliance across six review rounds. Every input has a programmatic label, every interactive control has an accessible name, modals trap focus and restore it when closed, the formatting toolbar follows the ARIA toolbar pattern with arrow-key navigation, route changes are announced to screen readers, connection status updates are politely live-regioned without spamming on flap, presence updates announce who joined and left, colour contrast meets AA in both light and dark themes, and focus indicators are visible against every background including the accent-coloured active toolbar buttons. Two-factor authentication offers a WebAuthn option which satisfies WCAG 3.3.8 Accessible Authentication without requiring users to remember anything.
+Ephesian has been rigorously tested to ensure it is as accessible as possible for users with disabilities.
+
+* Every input has a programmatic label.
+* Every on-screen element, be it a button, a text field, or a checkbox, has a clear screen reader label.
+* Modal dialogs keep focus and gracefully restore it when closed.
+* The formatting toolbar follows the ARIA toolbar pattern with arrow-key navigation.
+* Route changes are announced to screen readers, including the new page title.
+* Connection status updates are politely live-regioned and debounced, so screen readers are not constantly interrupted or spammed.
+* Presence updates announce who joined and left, with natural pluralisation.
+* Guests are clearly marked in the presence list both visually (dashed avatar border and "G" badge) and to assistive technology (the suffix "(guest)" is spoken).
+* Colour contrast meets WCAG 2.2 AA in both light and dark themes, and focus indicators are visible against every background including the accent-coloured active toolbar buttons.
+* Two-factor authentication offers a WebAuthn option which satisfies WCAG 3.3.8 Accessible Authentication without requiring users to remember anything.
 
 ## HTTPS and production
 
@@ -236,8 +258,3 @@ npm start > ephesian.log 2>&1
 The SQLite database is a normal SQLite file. You can open it with the `sqlite3` command-line tool or any GUI client such as [DB Browser for SQLite](https://sqlitebrowser.org/) to inspect tables, run queries, or recover data.
 
 If the frontend does not load, delete `public/dist` and run `npm run build` again. If the server refuses to start because of a database error, delete the `data` folder (this wipes all data) and start again to get a fresh database.
-
-
-## License
-
-MIT. Use it, fork it, adapt it. Attribution is appreciated but not required.

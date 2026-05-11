@@ -26,8 +26,15 @@ function requireVerifiedUser(req, res) {
   return u;
 }
 
-function requireOwner(req, res) {
+// Operations that mutate document ownership/sharing/2FA make no sense for guests.
+function requireFullAccount(req, res) {
   const u = requireVerifiedUser(req, res); if (!u) return null;
+  if (u.isGuest) { res.status(403).json({ error: 'guests_not_allowed' }); return null; }
+  return u;
+}
+
+function requireOwner(req, res) {
+  const u = requireFullAccount(req, res); if (!u) return null;
   const a = getDocumentAccess(req.params.id, u.id);
   if (!a) { res.status(404).json({ error: 'not_found' }); return null; }
   if (a.role !== 'owner') { res.status(403).json({ error: 'forbidden' }); return null; }
@@ -40,7 +47,7 @@ router.get('/', (req, res) => {
 });
 
 router.post('/', express.json(), (req, res) => {
-  const u = requireVerifiedUser(req, res); if (!u) return;
+  const u = requireFullAccount(req, res); if (!u) return;
   const title = String(req.body?.title || 'Untitled').slice(0, 200);
   const capacity = Math.max(0, Math.floor(Number(req.body?.capacity) || 0));
   const doc = createDocument({ ownerId: u.id, title, capacity });
@@ -151,14 +158,18 @@ router.post('/:id/invite-link', express.json(), (req, res) => {
   const role = req.body?.role === 'viewer' ? 'viewer' : 'editor';
   const maxUses = Math.max(0, Math.floor(Number(req.body?.maxUses) || 0));
   const expiresAt = req.body?.expiresAt ? Number(req.body.expiresAt) : null;
-  const token = createInviteLink(ctx.doc.id, { role, maxUses, expiresAt });
+  // Default: allow joining as a guest (the project's friction-free path).
+  // Owners can opt out per-link by passing allowGuests: false explicitly.
+  const allowGuests = req.body?.allowGuests === false ? false : true;
+  const token = createInviteLink(ctx.doc.id, { role, maxUses, expiresAt, allowGuests });
   res.json({
     ok: true,
     token,
     url: `${config.publicOrigin}/invite/link/${token}`,
     maxUses,
     role,
-    expiresAt
+    expiresAt,
+    allowGuests
   });
 });
 

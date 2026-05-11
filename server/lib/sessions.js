@@ -60,13 +60,14 @@ export function getSession(sessionId) {
   if (!sessionId) return null;
   const row = db.prepare(
     `SELECT s.*, u.email, u.display_name, u.email_verified,
-            u.totp_enabled, u.email_2fa_enabled
+            u.totp_enabled, u.email_2fa_enabled, u.is_guest
        FROM sessions s
        JOIN users u ON u.id = s.user_id
       WHERE s.id = ? AND s.expires_at > ?`
   ).get(sessionId, nowMs());
   if (!row) return null;
-  const hasWebauthn = db
+  const isGuest = !!row.is_guest;
+  const hasWebauthn = isGuest ? false : !!db
     .prepare('SELECT 1 FROM webauthn_credentials WHERE user_id = ? LIMIT 1')
     .get(row.user_id);
   return {
@@ -75,13 +76,16 @@ export function getSession(sessionId) {
     pending2FA: !!row.pending_2fa,
     user: {
       id: row.user_id,
-      email: row.email,
+      // Guests have a synthetic email — hide it from API responses so the client
+      // never has reason to display "guest+abc@guests.ephesian.local" anywhere.
+      email: isGuest ? null : row.email,
       displayName: row.display_name,
-      emailVerified: !!row.email_verified,
+      emailVerified: isGuest ? true : !!row.email_verified,
+      isGuest,
       twoFactor: {
         totp: !!row.totp_enabled,
         email: !!row.email_2fa_enabled,
-        webauthn: !!hasWebauthn
+        webauthn: hasWebauthn
       }
     }
   };
@@ -137,5 +141,13 @@ export function requireAuth(req, res, next) {
 export function requireVerified(req, res, next) {
   if (!req.user) return res.status(401).json({ error: 'auth_required' });
   if (!req.user.emailVerified) return res.status(403).json({ error: 'email_unverified' });
+  next();
+}
+
+// Block operations that don't make sense for guest sessions (creating documents,
+// sharing, managing 2FA, etc).
+export function requireNonGuest(req, res, next) {
+  if (!req.user) return res.status(401).json({ error: 'auth_required' });
+  if (req.user.isGuest) return res.status(403).json({ error: 'guests_not_allowed' });
   next();
 }

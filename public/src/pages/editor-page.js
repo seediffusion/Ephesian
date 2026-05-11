@@ -214,14 +214,21 @@ export async function renderEditorPage(main, params) {
       const shown = list.slice(0, 6);
       for (const u of shown) {
         const initials = (u.displayName || '?').split(/\s+/).map(x => x[0]).slice(0, 2).join('').toUpperCase();
+        const roleTxt = u.role ? ` (${u.role}${u.isGuest ? ', guest' : ''})` : (u.isGuest ? ' (guest)' : '');
+        const children = [
+          h('span', { 'aria-hidden': 'true' }, [initials]),
+          srOnly(`${u.displayName}${roleTxt}`)
+        ];
+        if (u.isGuest) {
+          // Real element (not ::after) so AT reliably excludes it via aria-hidden.
+          children.push(h('span', { class: 'guest-badge', 'aria-hidden': 'true' }, ['G']));
+        }
         presenceList.appendChild(h('li', {
           'data-uid': u.userId,
-          class: 'presence-avatar',
-          style: { backgroundColor: u.color || '#666' }
-        }, [
-          h('span', { 'aria-hidden': 'true' }, [initials]),
-          srOnly(`${u.displayName}${u.role ? ` (${u.role})` : ''}`)
-        ]));
+          class: 'presence-avatar' + (u.isGuest ? ' is-guest' : ''),
+          style: { backgroundColor: u.color || '#666' },
+          title: u.displayName + roleTxt
+        }, children));
       }
       if (list.length > 6) {
         presenceList.appendChild(h('li', {
@@ -591,6 +598,7 @@ async function openShareDialog(doc) {
       h('span', {}, [
         h('span', { class: 'tag ' + (isActive ? 'owner' : 'viewer') }, [status]),
         ` · ${l.role === 'viewer' ? 'Viewer' : 'Editor'}`,
+        l.allow_guests ? ' · guests allowed' : ' · account required',
         l.max_uses ? ` · uses ${l.uses} of ${l.max_uses}` : '',
         l.expires_at ? ` · expires ${new Date(l.expires_at).toLocaleString()}` : ''
       ]),
@@ -603,6 +611,8 @@ async function openShareDialog(doc) {
 
   const linkRoleId = nextId('link-role');
   const linkUsesId = nextId('link-uses');
+  const linkGuestsId = nextId('link-guests');
+  const linkGuestsHelpId = nextId('link-guests-help');
   const linkRoleSel = h('select', { id: linkRoleId }, [
     h('option', { value: 'editor' }, ['Editor']),
     h('option', { value: 'viewer' }, ['Viewer'])
@@ -615,12 +625,23 @@ async function openShareDialog(doc) {
     autocomplete: 'off',
     style: { width: '6rem' }
   });
+  const linkGuests = h('input', {
+    type: 'checkbox',
+    id: linkGuestsId,
+    checked: true,
+    'aria-describedby': linkGuestsHelpId
+  });
   const linkBtn = h('button', { type: 'button', class: 'btn' }, ['Create invite link']);
   linkBtn.addEventListener('click', async () => {
     busy(linkBtn, true);
     try {
       const r = await api('/api/documents/' + doc.id + '/invite-link', {
-        method: 'POST', body: { role: linkRoleSel.value, maxUses: Number(linkUses.value) || 0 }
+        method: 'POST',
+        body: {
+          role: linkRoleSel.value,
+          maxUses: Number(linkUses.value) || 0,
+          allowGuests: !!linkGuests.checked
+        }
       });
       try { await navigator.clipboard.writeText(r.url); } catch {}
       toast('Invite link created and copied to clipboard.', 'success');
@@ -682,6 +703,20 @@ async function openShareDialog(doc) {
         linkRoleSel,
         h('label', { class: 'field-label', for: linkUsesId }, ['Max uses (0 = unlimited)']),
         linkUses
+      ]),
+      h('div', {
+        class: 'field',
+        style: { marginTop: '0.6rem', display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }
+      }, [
+        linkGuests,
+        h('div', { style: { flex: '1' } }, [
+          h('label', { class: 'field-label', for: linkGuestsId, style: { display: 'inline' } }, [
+            'Allow joining as a guest (no account required)'
+          ]),
+          h('div', { class: 'field-help', id: linkGuestsHelpId }, [
+            'When enabled, anyone with the link can join by just entering a display name. Disable to require visitors to sign in or create an Ephesian account first.'
+          ])
+        ])
       ]),
       h('div', { style: { display: 'flex', justifyContent: 'flex-end', marginTop: '0.6rem' } }, [linkBtn]),
       h('h3', {}, ['Capacity limit']),

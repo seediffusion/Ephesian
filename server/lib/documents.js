@@ -97,12 +97,12 @@ export function removeShare(docId, userId) {
     .run(docId, userId);
 }
 
-export function createInviteLink(docId, { role = 'editor', maxUses = 0, expiresAt = null } = {}) {
+export function createInviteLink(docId, { role = 'editor', maxUses = 0, expiresAt = null, allowGuests = true } = {}) {
   const token = randomToken(24);
   db.prepare(
-    `INSERT INTO invite_links (token, document_id, role, created_at, expires_at, max_uses, uses, revoked)
-     VALUES (?, ?, ?, ?, ?, ?, 0, 0)`
-  ).run(token, docId, role, nowMs(), expiresAt, Math.max(0, Math.floor(maxUses)));
+    `INSERT INTO invite_links (token, document_id, role, created_at, expires_at, max_uses, uses, revoked, allow_guests)
+     VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?)`
+  ).run(token, docId, role, nowMs(), expiresAt, Math.max(0, Math.floor(maxUses)), allowGuests ? 1 : 0);
   return token;
 }
 
