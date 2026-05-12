@@ -580,6 +580,8 @@ async function openShareDialog(doc) {
   // ---- Invite by email ----
   const emailId = nextId('share-email');
   const emailRoleId = nextId('share-role');
+  const emailGuestsId = nextId('share-email-guests');
+  const emailGuestsHelpId = nextId('share-email-guests-help');
   const emailInput = h('input', {
     type: 'email', id: emailId,
     placeholder: 'name@example.com',
@@ -590,12 +592,23 @@ async function openShareDialog(doc) {
     h('option', { value: 'editor' }, ['Editor']),
     h('option', { value: 'viewer' }, ['Viewer'])
   ]);
+  const emailGuests = h('input', {
+    type: 'checkbox',
+    id: emailGuestsId,
+    checked: true,
+    'aria-describedby': emailGuestsHelpId
+  });
   const inviteBtn = h('button', { type: 'button', class: 'btn btn-primary' }, ['Send invitation']);
   inviteBtn.addEventListener('click', async () => {
     busy(inviteBtn, true);
     try {
       const r = await api('/api/documents/' + doc.id + '/invite-email', {
-        method: 'POST', body: { email: emailInput.value.trim(), role: roleSel.value }
+        method: 'POST',
+        body: {
+          email: emailInput.value.trim(),
+          role: roleSel.value,
+          allowGuests: !!emailGuests.checked
+        }
       });
       toast(r.mode === 'direct' ? 'Added to document.' : 'Invitation email sent.', 'success');
       emailInput.value = '';
@@ -733,9 +746,23 @@ async function openShareDialog(doc) {
         h('label', { class: 'field-label', for: emailRoleId }, ['Role']),
         roleSel
       ]),
+      h('div', {
+        class: 'field',
+        style: { display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }
+      }, [
+        emailGuests,
+        h('div', { style: { flex: '1' } }, [
+          h('label', { class: 'field-label', for: emailGuestsId, style: { display: 'inline' } }, [
+            'Allow joining as a guest (no account required)'
+          ]),
+          h('div', { class: 'field-help', id: emailGuestsHelpId }, [
+            'When enabled, the recipient can choose to join the document immediately as a guest by entering a display name, without creating an Ephesian account.'
+          ])
+        ])
+      ]),
       h('div', { style: { display: 'flex', justifyContent: 'flex-end' } }, [inviteBtn]),
       h('p', { class: 'field-help' }, [
-        'Existing users gain access immediately. New users get an email invite they can claim by signing up with the same address.'
+        'Existing users gain access immediately. New users get an email invite they can claim by signing up with the same address, or — when allowed — by joining as a guest.'
       ]),
       h('h3', { id: linksListId }, ['Invite links']),
       linksList,

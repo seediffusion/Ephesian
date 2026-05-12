@@ -115,6 +115,8 @@ router.post('/:id/invite-email', express.json(), async (req, res) => {
   const ctx = requireOwner(req, res); if (!ctx) return;
   const email = String(req.body?.email || '').trim().toLowerCase();
   const role = req.body?.role === 'viewer' ? 'viewer' : 'editor';
+  // Mirrors invite-link: default to allowing guests, owners can opt out per-invite.
+  const allowGuests = req.body?.allowGuests === false ? false : true;
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'invalid_email' });
 
   const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
@@ -138,19 +140,23 @@ Open it here: ${config.publicOrigin}/d/${ctx.doc.id}`
     docId: ctx.doc.id,
     email,
     role,
-    invitedBy: ctx.user.id
+    invitedBy: ctx.user.id,
+    allowGuests
   });
   const link = `${config.publicOrigin}/invite/email/${token}`;
+  const guestNote = allowGuests
+    ? '\nYou can also join immediately as a guest from that link, without creating an account.'
+    : '';
   await sendMail({
     to: email,
     subject: `${ctx.user.displayName} invited you to collaborate on ${config.appName}`,
     text:
 `${ctx.user.displayName} (${ctx.user.email}) invited you to collaborate on "${ctx.doc.title}".
 
-Accept by signing up at ${config.appName} with this email address:
-${link}`
+Open this link to accept:
+${link}${guestNote}`
   });
-  res.json({ ok: true, mode: 'invite_email' });
+  res.json({ ok: true, mode: 'invite_email', allowGuests });
 });
 
 router.post('/:id/invite-link', express.json(), (req, res) => {

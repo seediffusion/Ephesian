@@ -129,13 +129,17 @@ export function revokeInviteLink(token) {
   db.prepare('UPDATE invite_links SET revoked = 1 WHERE token = ?').run(token);
 }
 
-export function createEmailInvite({ docId, email, role = 'editor', invitedBy }) {
+export function createEmailInvite({ docId, email, role = 'editor', invitedBy, allowGuests = true }) {
   const token = randomToken(24);
   db.prepare(
-    `INSERT INTO email_invites (id, document_id, email, role, invited_by, created_at, consumed, token)
-     VALUES (?, ?, ?, ?, ?, ?, 0, ?)`
-  ).run(newId('einv'), docId, String(email).toLowerCase(), role, invitedBy, nowMs(), token);
+    `INSERT INTO email_invites (id, document_id, email, role, invited_by, created_at, consumed, token, allow_guests)
+     VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)`
+  ).run(newId('einv'), docId, String(email).toLowerCase(), role, invitedBy, nowMs(), token, allowGuests ? 1 : 0);
   return token;
+}
+
+export function getEmailInvite(token) {
+  return db.prepare('SELECT * FROM email_invites WHERE token = ?').get(token);
 }
 
 export function consumeEmailInvite(token, userEmail) {
