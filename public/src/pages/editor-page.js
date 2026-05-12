@@ -1,4 +1,4 @@
-import { h, busy, toast, openModal, confirm, announceRoute, nextId, icon, srOnly } from '../ui.js';
+import { h, busy, toast, openModal, confirm, announceRoute, announce, nextId, icon, srOnly } from '../ui.js';
 import { api, downloadFile, fetchMe, meUser } from '../api.js';
 import { navigate } from '../router.js';
 import { CollabSession } from '../editor.js';
@@ -408,6 +408,47 @@ function buildToolbar(toolbar, session) {
   editor.on('selectionUpdate', refresh);
   editor.on('transaction', refresh);
   refresh();
+
+  // ----- Spoken feedback when a block-level format changes -----
+  // Browsers do not announce contenteditable block-role changes (paragraph → heading
+  // and similar) when the user applies them via toolbar OR keyboard shortcut. We hook
+  // the ProseMirror transaction stream — which is the single funnel for both paths —
+  // and pipe a short message through the existing polite live region.
+  function formatSignature(state) {
+    const $head = state.selection.$head;
+    const parts = [];
+    for (let d = 1; d <= $head.depth; d++) {
+      const node = $head.node(d);
+      const t = node.type.name;
+      if (t === 'heading') parts.push(`h${node.attrs.level || 1}`);
+      else parts.push(t);
+    }
+    return parts.join('/');
+  }
+  function formatHumanName(state) {
+    const $head = state.selection.$head;
+    // Walk from innermost outwards; the most specific wrapper wins.
+    for (let d = $head.depth; d >= 1; d--) {
+      const node = $head.node(d);
+      switch (node.type.name) {
+        case 'heading': return `Heading level ${node.attrs.level || 1}`;
+        case 'codeBlock': return 'Code block';
+        case 'blockquote': return 'Block quote';
+        case 'taskList': return 'Task list';
+        case 'bulletList': return 'Bullet list';
+        case 'orderedList': return 'Numbered list';
+      }
+    }
+    return 'Paragraph';
+  }
+  let lastBlockSig = formatSignature(editor.state);
+  editor.on('transaction', ({ transaction }) => {
+    const sig = formatSignature(editor.state);
+    if (transaction.docChanged && sig !== lastBlockSig) {
+      announce(`${formatHumanName(editor.state)} applied`);
+    }
+    lastBlockSig = sig;
+  });
 }
 
 function promptLink(editor) {
