@@ -107,7 +107,8 @@ CREATE TABLE IF NOT EXISTS email_invites (
   invited_by TEXT REFERENCES users(id) ON DELETE SET NULL,
   created_at INTEGER NOT NULL,
   consumed INTEGER NOT NULL DEFAULT 0,
-  token TEXT NOT NULL UNIQUE
+  token TEXT NOT NULL UNIQUE,
+  allow_guests INTEGER NOT NULL DEFAULT 1
 );
 CREATE INDEX IF NOT EXISTS idx_email_invites_doc ON email_invites(document_id);
 CREATE INDEX IF NOT EXISTS idx_email_invites_email ON email_invites(email);
@@ -130,6 +131,7 @@ function ensureColumn(table, column, definition) {
 }
 ensureColumn('users', 'is_guest', 'INTEGER NOT NULL DEFAULT 0');
 ensureColumn('invite_links', 'allow_guests', 'INTEGER NOT NULL DEFAULT 1');
+ensureColumn('email_invites', 'allow_guests', 'INTEGER NOT NULL DEFAULT 1');
 
 export function nowMs() { return Date.now(); }
 

@@ -120,13 +120,13 @@ You can revoke a link from the same dialog at any time. Revoking does not remove
 
 ### Guest access
 
-By default, anyone who opens an invite link can join the document immediately as a **guest** by entering a display name. They do not need an Ephesian account, an email address, or a password. Guests get the role chosen on the invite link (editor or viewer) and behave exactly like any other collaborator while they are connected, including showing up in the presence list (with a dashed avatar border and a small "G" badge) and counting toward the document's collaborator limit. Screen readers announce guests as "Name (editor, guest)" or similar.
+By default, anyone who opens an invite link or an email invitation can join the document immediately as a **guest** by entering a display name. They do not need an Ephesian account, an email address, or a password. Guests get the role chosen on the invite (editor or viewer) and behave exactly like any other collaborator while they are connected, including showing up in the presence list (with a dashed avatar border and a small "G" badge) and counting toward the document's collaborator limit. Screen readers announce guests as "Name (editor, guest)" or similar.
 
-Guest access is per-link. When you create or look at an invite link in the Share dialog, you will see whether it allows guests or requires an account. To require an account for a specific link, uncheck "Allow joining as a guest (no account required)" when creating it. Existing links can be revoked and replaced if you change your mind.
+Guest access is per-invite. When you create an invite link or send an email invitation in the Share dialog, you will see an "Allow joining as a guest (no account required)" checkbox. Leave it on (the default) to let the recipient choose; uncheck it to require them to sign in or create an Ephesian account first. For email invitations, only the matching email address can sign in to accept; the guest path is a separate option that does not need to match.
 
 A guest session lasts for the browser session only. If a guest closes the tab, returns the next day, and opens the same link, they re-enter their display name and start a fresh guest session. Their previous in-document edits are preserved in the document itself — they just no longer have access through that earlier guest identity. If a guest wants to come back as themselves later, they can press Create an account in the header at any time during their guest session.
 
-Guests cannot create their own documents, cannot share documents they have been invited to, cannot manage 2FA, and cannot accept email-based invitations (those are tied to the email address the invitation was sent to). Email invitations always require a full account.
+Guests cannot create their own documents, cannot share documents they have been invited to, and cannot manage 2FA.
 
 ## Setting a collaborator limit
 
