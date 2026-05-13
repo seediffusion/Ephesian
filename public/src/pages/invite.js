@@ -123,6 +123,7 @@ export async function renderLinkInvite(main, params) {
 function promptGuestJoin(endpointPath) {
   const inputId = nextId('guest-name');
   const errId = nextId('guest-err');
+  const formId = nextId('guest-form');
   const input = h('input', {
     type: 'text',
     id: inputId,
@@ -138,7 +139,7 @@ function promptGuestJoin(endpointPath) {
     'aria-live': 'assertive',
     hidden: true
   });
-  const ok = h('button', { type: 'submit', class: 'btn btn-primary' }, ['Join document']);
+  const ok = h('button', { type: 'submit', form: formId, class: 'btn btn-primary' }, ['Join document']);
   const cancel = h('button', {
     type: 'button',
     class: 'btn',
@@ -146,6 +147,7 @@ function promptGuestJoin(endpointPath) {
   }, ['Cancel']);
 
   const form = h('form', {
+    id: formId,
     onsubmit: async (e) => {
       e.preventDefault();
       err.hidden = true;
@@ -252,39 +254,57 @@ export async function renderEmailInvite(main, params) {
     return;
   }
 
-  // Action buttons. Guest path is only shown if the inviter allowed it.
-  const actions = h('div', { style: { display: 'flex', gap: '0.5rem', flexWrap: 'wrap' } });
+  // ---- Not signed in: offer guest join (if allowed) AND/OR sign-in/register ----
   if (info.allowGuests) {
+    card.appendChild(h('p', {}, [
+      'You can join immediately as a guest using a display name, or sign in / create an account if you have one.'
+    ]));
+    const actions = h('div', {
+      style: { display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }
+    });
     actions.appendChild(h('button', {
       type: 'button',
       class: 'btn btn-primary',
       'aria-haspopup': 'dialog',
       onclick: () => promptGuestJoin('/api/invites/email/' + params.token + '/guest')
     }, ['Join as a guest']));
-  }
-  if (!user) {
-    actions.appendChild(h('a', {
-      class: 'btn',
-      'data-link': '',
-      href: '/login?next=' + encodeURIComponent('/invite/email/' + params.token)
-    }, ['Sign in']));
-    actions.appendChild(h('a', {
-      class: 'btn btn-ghost',
-      'data-link': '',
-      href: '/register?next=' + encodeURIComponent('/invite/email/' + params.token)
-    }, ['Create an account']));
-  }
-  card.appendChild(actions);
-
-  if (info.allowGuests) {
+    if (!user) {
+      actions.appendChild(h('a', {
+        class: 'btn',
+        'data-link': '',
+        href: '/login?next=' + encodeURIComponent('/invite/email/' + params.token)
+      }, ['Sign in']));
+      actions.appendChild(h('a', {
+        class: 'btn btn-ghost',
+        'data-link': '',
+        href: '/register?next=' + encodeURIComponent('/invite/email/' + params.token)
+      }, ['Create an account']));
+    }
+    card.appendChild(actions);
     card.appendChild(h('p', { class: 'field-help' }, [
-      'Guest access lasts for this browser session only. Sign in or create an account if you want to come back later.'
+      'Guest access lasts for this browser session only. Signing in or creating an account lets you come back later.'
     ]));
-  } else if (!user) {
-    card.appendChild(h('p', { class: 'field-help' }, [
+    announceRoute('You have been invited. Choose how to join.');
+    return;
+  }
+
+  // ---- Guests not allowed for this link ----
+  if (!user) {
+    card.appendChild(h('p', {}, [
       'This invitation requires an Ephesian account that matches the email address it was sent to.'
     ]));
+    card.appendChild(h('div', { style: { display: 'flex', gap: '0.5rem', flexWrap: 'wrap' } }, [
+      h('a', {
+        class: 'btn btn-primary',
+        'data-link': '',
+        href: '/register?next=' + encodeURIComponent('/invite/email/' + params.token)
+      }, ['Create account']),
+      h('a', {
+        class: 'btn',
+        'data-link': '',
+        href: '/login?next=' + encodeURIComponent('/invite/email/' + params.token)
+      }, ['Sign in'])
+    ]));
   }
-
-  announceRoute('You have been invited. Choose how to join.');
+  announceRoute('You have been invited.');
 }
