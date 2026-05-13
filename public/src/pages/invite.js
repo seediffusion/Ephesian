@@ -138,29 +138,11 @@ function promptGuestJoin(endpointPath) {
     hidden: true
   });
   
-  let form;
+  let m;
   const ok = h('button', {
     type: 'button',
     class: 'btn btn-primary',
-    onclick: () => {
-      if (form) {
-        if (form.requestSubmit) {
-          form.requestSubmit();
-        } else if (form.reportValidity()) {
-          form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
-        }
-      }
-    }
-  }, ['Join document']);
-  const cancel = h('button', {
-    type: 'button',
-    class: 'btn',
-    onclick: () => m.close()
-  }, ['Cancel']);
-
-  form = h('form', {
-    onsubmit: async (e) => {
-      e.preventDefault();
+    onclick: async () => {
       err.hidden = true;
       input.removeAttribute('aria-invalid');
       const displayName = input.value.trim();
@@ -179,7 +161,7 @@ function promptGuestJoin(endpointPath) {
         });
         clearMeCache();
         await renderAuthSlot();
-        m.close();
+        if (m) m.close();
         navigate('/d/' + r.documentId);
       } catch (e2) {
         err.textContent =
@@ -195,6 +177,19 @@ function promptGuestJoin(endpointPath) {
         input.focus();
       } finally { busy(ok, false); }
     }
+  }, ['Join document']);
+
+  const cancel = h('button', {
+    type: 'button',
+    class: 'btn',
+    onclick: () => m && m.close()
+  }, ['Cancel']);
+
+  const form = h('form', {
+    onsubmit: (e) => {
+      e.preventDefault();
+      ok.click();
+    }
   }, [
     h('div', { class: 'field' }, [
       h('label', { class: 'field-label', for: inputId }, ['Display name']),
@@ -206,7 +201,7 @@ function promptGuestJoin(endpointPath) {
     err
   ]);
 
-  const m = openModal({
+  m = openModal({
     title: 'Join as a guest',
     body: form,
     footer: [cancel, ok],
