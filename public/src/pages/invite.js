@@ -123,7 +123,6 @@ export async function renderLinkInvite(main, params) {
 function promptGuestJoin(endpointPath) {
   const inputId = nextId('guest-name');
   const errId = nextId('guest-err');
-  const formId = nextId('guest-form');
   const input = h('input', {
     type: 'text',
     id: inputId,
@@ -139,15 +138,28 @@ function promptGuestJoin(endpointPath) {
     'aria-live': 'assertive',
     hidden: true
   });
-  const ok = h('button', { type: 'submit', form: formId, class: 'btn btn-primary' }, ['Join document']);
+  
+  let form;
+  const ok = h('button', {
+    type: 'button',
+    class: 'btn btn-primary',
+    onclick: () => {
+      if (form) {
+        if (form.requestSubmit) {
+          form.requestSubmit();
+        } else if (form.reportValidity()) {
+          form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+        }
+      }
+    }
+  }, ['Join document']);
   const cancel = h('button', {
     type: 'button',
     class: 'btn',
     onclick: () => m.close()
   }, ['Cancel']);
 
-  const form = h('form', {
-    id: formId,
+  form = h('form', {
     onsubmit: async (e) => {
       e.preventDefault();
       err.hidden = true;
