@@ -128,7 +128,6 @@ function promptGuestJoin(endpointPath) {
     id: inputId,
     autocomplete: 'nickname',
     maxlength: '60',
-    required: true,
     placeholder: 'Your name as it will appear to others'
   });
   const err = h('div', {
