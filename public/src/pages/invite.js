@@ -138,46 +138,46 @@ function promptGuestJoin(endpointPath) {
     hidden: true
   });
   
+  const ok = h('button', { type: 'button', class: 'btn btn-primary' }, ['Join document']);
+  
   let m;
-  const ok = h('button', {
-    type: 'button',
-    class: 'btn btn-primary',
-    onclick: async () => {
-      err.hidden = true;
-      input.removeAttribute('aria-invalid');
-      const displayName = input.value.trim();
-      if (!displayName) {
-        err.textContent = 'Enter a display name to continue.';
-        err.hidden = false;
-        input.setAttribute('aria-invalid', 'true');
-        input.focus();
-        return;
-      }
-      busy(ok, true);
-      try {
-        const r = await api(endpointPath, {
-          method: 'POST',
-          body: { displayName }
-        });
-        clearMeCache();
-        await renderAuthSlot();
-        if (m) m.close();
-        navigate('/d/' + r.documentId);
-      } catch (e2) {
-        err.textContent =
-          e2.data?.error === 'guests_not_allowed' ? 'The owner of this invite does not allow guest access.' :
-          e2.data?.error === 'display_name_required' ? 'Enter a display name to continue.' :
-          e2.data?.error === 'expired' ? 'This invite has expired.' :
-          e2.data?.error === 'exhausted' ? 'This invite has reached its maximum uses.' :
-          e2.data?.error === 'invalid_invite' ? 'This invitation could not be found or has already been used.' :
-          e2.data?.error === 'too_many_attempts' ? 'Too many guest join attempts. Please wait a few minutes.' :
-          (e2.message || 'Could not join as a guest.');
-        err.hidden = false;
-        input.setAttribute('aria-invalid', 'true');
-        input.focus();
-      } finally { busy(ok, false); }
+  const submitLogic = async () => {
+    err.hidden = true;
+    input.removeAttribute('aria-invalid');
+    const displayName = input.value.trim();
+    if (!displayName) {
+      err.textContent = 'Enter a display name to continue.';
+      err.hidden = false;
+      input.setAttribute('aria-invalid', 'true');
+      input.focus();
+      return;
     }
-  }, ['Join document']);
+    busy(ok, true);
+    try {
+      const r = await api(endpointPath, {
+        method: 'POST',
+        body: { displayName }
+      });
+      clearMeCache();
+      await renderAuthSlot();
+      if (m) m.close();
+      navigate('/d/' + r.documentId);
+    } catch (e2) {
+      err.textContent =
+        e2.data?.error === 'guests_not_allowed' ? 'The owner of this invite does not allow guest access.' :
+        e2.data?.error === 'display_name_required' ? 'Enter a display name to continue.' :
+        e2.data?.error === 'expired' ? 'This invite has expired.' :
+        e2.data?.error === 'exhausted' ? 'This invite has reached its maximum uses.' :
+        e2.data?.error === 'invalid_invite' ? 'This invitation could not be found or has already been used.' :
+        e2.data?.error === 'too_many_attempts' ? 'Too many guest join attempts. Please wait a few minutes.' :
+        (e2.message || 'Could not join as a guest.');
+      err.hidden = false;
+      input.setAttribute('aria-invalid', 'true');
+      input.focus();
+    } finally { busy(ok, false); }
+  };
+
+  ok.addEventListener('click', submitLogic);
 
   const cancel = h('button', {
     type: 'button',
@@ -188,7 +188,7 @@ function promptGuestJoin(endpointPath) {
   const form = h('form', {
     onsubmit: (e) => {
       e.preventDefault();
-      ok.click();
+      submitLogic();
     }
   }, [
     h('div', { class: 'field' }, [
