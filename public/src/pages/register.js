@@ -22,7 +22,7 @@ export function renderRegister(main, search) {
   const emailInput = h('input', {
     type: 'email', id: 'register-email',
     autocomplete: 'email', required: true,
-    'aria-describedby': emailHelpId,
+    'aria-describedby': `${emailHelpId} ${errId}`,
     inputmode: 'email'
   });
   const nameInput = h('input', {
@@ -33,11 +33,12 @@ export function renderRegister(main, search) {
   const passInput = h('input', {
     type: 'password', id: 'register-password',
     autocomplete: 'new-password', minlength: '10', required: true,
-    'aria-describedby': passHelpId
+    'aria-describedby': `${passHelpId} ${errId}`
   });
   const passConfirm = h('input', {
     type: 'password', id: 'register-password2',
-    autocomplete: 'new-password', required: true
+    autocomplete: 'new-password', required: true,
+    'aria-describedby': errId
   });
   const submit = h('button', { type: 'submit', class: 'btn btn-primary' }, ['Create account']);
 

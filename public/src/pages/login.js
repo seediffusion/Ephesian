@@ -19,11 +19,13 @@ export function renderLogin(main, search) {
   const emailInput = h('input', {
     type: 'email', id: 'login-email',
     autocomplete: 'email', required: true,
+    'aria-describedby': errId,
     inputmode: 'email'
   });
   const passInput = h('input', {
     type: 'password', id: 'login-password',
-    autocomplete: 'current-password', required: true
+    autocomplete: 'current-password', required: true,
+    'aria-describedby': errId
   });
   const submit = h('button', { type: 'submit', class: 'btn btn-primary' }, ['Sign in']);
 

@@ -58,7 +58,7 @@ function autoHtmlFromText(text) {
   // sentence punctuation that almost certainly is not part of the URL itself.
   const linked = escaped.replace(
     /\bhttps?:\/\/[^\s<]+[^\s<.,:;!?)\]]/g,
-    (url) => `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color:#1d4ed8;text-decoration:underline;">${url}</a>`
+    (url) => `<a href="${url}" style="color:#1d4ed8;text-decoration:underline;">${describeEmailLink(url)}</a>`
   );
   const body = linked
     .split(/\n{2,}/)
@@ -66,12 +66,30 @@ function autoHtmlFromText(text) {
     .join('\n');
   return [
     '<!doctype html>',
-    '<html><head><meta charset="utf-8"></head>',
+    '<html lang="en"><head><meta charset="utf-8"></head>',
     '<body style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;',
     'font-size:15px;line-height:1.55;color:#15171c;max-width:36rem;margin:1.5rem auto;padding:0 1rem;">',
     body,
     '</body></html>'
   ].join('');
+}
+
+function describeEmailLink(escapedUrl) {
+  const rawUrl = String(escapedUrl)
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+  try {
+    const { pathname } = new URL(rawUrl);
+    if (pathname === '/verify') return 'Confirm your account';
+    if (pathname === '/reset-password') return 'Reset your password';
+    if (pathname.startsWith('/invite/email/')) return 'Accept the invitation';
+    if (pathname.startsWith('/invite/link/')) return 'Open the invite link';
+    if (pathname.startsWith('/d/')) return 'Open the shared document';
+  } catch {}
+  return 'Open link';
 }
 
 export function emailMode() {

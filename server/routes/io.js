@@ -110,7 +110,7 @@ function decodeEntities(s) {
 }
 
 function htmlDocument(title, body) {
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title></head><body>${body}</body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title></head><body>${body}</body></html>`;
 }
 
 function sanitizeHtml(input) {

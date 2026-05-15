@@ -1,10 +1,10 @@
-import { Editor } from '@tiptap/core';
+import { Editor, mergeAttributes } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
 import Link from '@tiptap/extension-link';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
-import Table from '@tiptap/extension-table';
+import Table, { TableView, createColGroup } from '@tiptap/extension-table';
 import TableRow from '@tiptap/extension-table-row';
 import TableCell from '@tiptap/extension-table-cell';
 import TableHeader from '@tiptap/extension-table-header';
@@ -24,6 +24,63 @@ const MESSAGE_SYNC = 0;
 const MESSAGE_AWARENESS = 1;
 const MESSAGE_QUERY_AWARENESS = 3;
 const MESSAGE_PRESENCE_SUMMARY = 100;
+
+const AccessibleTable = Table.extend({
+  addAttributes() {
+    return {
+      ...(this.parent?.() || {}),
+      accessibleName: {
+        default: null,
+        parseHTML: element => {
+          const caption = element.querySelector(':scope > caption')?.textContent?.trim();
+          return caption || element.getAttribute('aria-label') || null;
+        },
+        renderHTML: () => ({})
+      }
+    };
+  },
+
+  renderHTML({ node, HTMLAttributes }) {
+    const { colgroup, tableWidth, tableMinWidth } = createColGroup(node, this.options.cellMinWidth);
+    const attrs = mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
+      style: tableWidth ? `width: ${tableWidth}` : `min-width: ${tableMinWidth}`
+    });
+    const caption = node.attrs.accessibleName
+      ? [['caption', {}, node.attrs.accessibleName]]
+      : [];
+    const table = ['table', attrs, ...caption, colgroup, ['tbody', 0]];
+    return this.options.renderWrapper ? ['div', { class: 'tableWrapper' }, table] : table;
+  }
+});
+
+class AccessibleTableView extends TableView {
+  constructor(node, cellMinWidth) {
+    super(node, cellMinWidth);
+    this.updateCaption(node);
+  }
+
+  update(node) {
+    const ok = super.update(node);
+    if (ok) this.updateCaption(node);
+    return ok;
+  }
+
+  updateCaption(node) {
+    const label = String(node.attrs.accessibleName || '').trim();
+    if (!label) {
+      this.table.removeAttribute('aria-label');
+      this.caption?.remove();
+      this.caption = null;
+      return;
+    }
+    this.table.removeAttribute('aria-label');
+    if (!this.caption) {
+      this.caption = document.createElement('caption');
+      this.table.insertBefore(this.caption, this.table.firstChild);
+    }
+    this.caption.textContent = label;
+  }
+}
 
 export class CollabSession {
   constructor({ docId, mountEl, user, role, onPresence, onStatus, onCapacityReached }) {
@@ -74,8 +131,13 @@ export class CollabSession {
         Link.configure({ openOnClick: true, autolink: true, linkOnPaste: true }),
         TaskList,
         TaskItem.configure({ nested: true }),
-        Table.configure({ resizable: true }),
-        TableRow, TableHeader, TableCell,
+        AccessibleTable.configure({
+          resizable: true,
+          View: AccessibleTableView
+        }),
+        TableRow,
+        TableHeader.configure({ HTMLAttributes: { scope: 'col' } }),
+        TableCell,
         TextAlign.configure({ types: ['heading', 'paragraph'] }),
         Image.configure({ inline: false }),
         Placeholder.configure({ placeholder: 'Start typing your document…' }),
@@ -230,7 +292,9 @@ export class CollabSession {
 }
 
 function colorFor(userId) {
-  const palette = ['#e57373','#ba68c8','#7986cb','#4dd0e1','#81c784','#ffb74d','#a1887f','#90a4ae','#f06292','#9575cd'];
+  // Medium-dark colors keep white cursor labels and avatar initials readable
+  // while still contrasting with both light and dark editor surfaces.
+  const palette = ['#dc2626','#c026d3','#047857','#047481','#0e7490','#15803d','#b45309','#db2777','#9333ea','#2563eb'];
   let h = 0;
   for (const c of String(userId)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
   return palette[h % palette.length];
