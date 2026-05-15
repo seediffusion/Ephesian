@@ -67,7 +67,7 @@ function serveShell(req, res) {
 }
 
 const PAGES = [
-  '/', '/login', '/register', '/verify', '/account', '/dashboard',
+  '/', '/login', '/register', '/forgot-password', '/reset-password', '/verify', '/account', '/dashboard',
   '/d/:id', '/invite/link/:token', '/invite/email/:token'
 ];
 for (const p of PAGES) app.get(p, serveShell);

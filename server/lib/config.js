@@ -42,6 +42,11 @@ function toInt(v, fallback) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function toPositiveInt(v, fallback) {
+  const n = toInt(v, fallback);
+  return n > 0 ? n : fallback;
+}
+
 const port = toInt(process.env.PORT, 8787);
 const wsPort = toInt(process.env.WS_PORT, 0) || port;
 const publicOrigin = (process.env.PUBLIC_ORIGIN || `http://localhost:${port}`).replace(/\/$/, '');
@@ -69,6 +74,14 @@ export const config = {
     ? process.env.DATABASE_PATH
     : path.join(PROJECT_ROOT, process.env.DATABASE_PATH || 'data/ephesian.db'),
   defaultDocumentCapacity: toInt(process.env.DEFAULT_DOCUMENT_CAPACITY, 0),
+  passwordResetRateLimits: {
+    requestIpMax: toPositiveInt(process.env.PASSWORD_RESET_REQUEST_IP_MAX, 10),
+    requestIpWindowMs: toPositiveInt(process.env.PASSWORD_RESET_REQUEST_IP_WINDOW_MS, 60 * 60 * 1000),
+    requestEmailMax: toPositiveInt(process.env.PASSWORD_RESET_REQUEST_EMAIL_MAX, 5),
+    requestEmailWindowMs: toPositiveInt(process.env.PASSWORD_RESET_REQUEST_EMAIL_WINDOW_MS, 60 * 60 * 1000),
+    confirmIpMax: toPositiveInt(process.env.PASSWORD_RESET_CONFIRM_IP_MAX, 20),
+    confirmIpWindowMs: toPositiveInt(process.env.PASSWORD_RESET_CONFIRM_IP_WINDOW_MS, 15 * 60 * 1000)
+  },
   smtp: {
     host: process.env.SMTP_HOST || '',
     port: toInt(process.env.SMTP_PORT, 587),

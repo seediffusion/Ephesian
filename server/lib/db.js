@@ -45,6 +45,8 @@ CREATE TABLE IF NOT EXISTS email_tokens (
   consumed INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL
 );
+CREATE INDEX IF NOT EXISTS idx_email_tokens_lookup
+  ON email_tokens(user_id, purpose, code_hash, consumed, expires_at);
 
 CREATE TABLE IF NOT EXISTS webauthn_credentials (
   id TEXT PRIMARY KEY,
