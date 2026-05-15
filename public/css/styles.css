@@ -581,6 +581,27 @@ input:focus, textarea:focus, select:focus, button:focus-visible, a:focus-visible
   min-width: min(100%, 14rem);
   overflow-wrap: anywhere;
 }
+.share-person {
+  display: grid;
+  gap: 0.3rem;
+}
+.share-meta,
+.share-actions,
+.permission-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+.share-actions {
+  justify-content: flex-end;
+}
+.permission-toggle {
+  min-height: 1.75rem;
+}
+.permission-toggle input {
+  flex: 0 0 auto;
+}
 
 .code-blob {
   font-family: var(--font-mono);

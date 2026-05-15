@@ -83,13 +83,25 @@ class AccessibleTableView extends TableView {
 }
 
 export class CollabSession {
-  constructor({ docId, mountEl, user, role, onPresence, onStatus, onCapacityReached }) {
+  constructor({
+    docId,
+    mountEl,
+    user,
+    role,
+    onPresence,
+    onStatus,
+    onCapacityReached,
+    onRoleChanged,
+    onAccessRevoked
+  }) {
     this.docId = docId;
     this.user = user;
     this.role = role;
     this.onPresence = onPresence;
     this.onStatus = onStatus;
     this.onCapacityReached = onCapacityReached;
+    this.onRoleChanged = onRoleChanged;
+    this.onAccessRevoked = onAccessRevoked;
     this.ydoc = new Y.Doc();
     this.persistence = new IndexeddbPersistence('ephesian-' + docId, this.ydoc);
     this.awareness = new awarenessProtocol.Awareness(this.ydoc);
@@ -101,6 +113,8 @@ export class CollabSession {
     this.ws = null;
     this.shouldReconnect = true;
     this.reconnectDelay = 1000;
+    this.revokedPayload = null;
+    this.revokedNotified = false;
     this.editor = null;
     this.mountEl = mountEl;
     this._initEditor();
@@ -148,6 +162,24 @@ export class CollabSession {
         })
       ]
     });
+    this._syncEditorAccess();
+  }
+
+  _syncEditorAccess() {
+    if (!this.editor) return;
+    const editable = this.role !== 'viewer';
+    this.editor.setEditable(editable);
+    const dom = this.editor.view?.dom;
+    if (dom) {
+      dom.setAttribute('aria-readonly', editable ? 'false' : 'true');
+      dom.setAttribute('aria-label', editable ? 'Document content. Rich text editor.' : 'Document content. Read-only.');
+    }
+  }
+
+  _notifyAccessRevoked(payload) {
+    if (this.revokedNotified) return;
+    this.revokedNotified = true;
+    this.onAccessRevoked && this.onAccessRevoked(payload || { reason: 'temporarily_removed' });
   }
 
   _connect() {
@@ -197,6 +229,11 @@ export class CollabSession {
         this.onCapacityReached && this.onCapacityReached();
         return;
       }
+      if (e.code === 4004) {
+        this.shouldReconnect = false;
+        this._notifyAccessRevoked(this.revokedPayload);
+        return;
+      }
       this.onStatus && this.onStatus({ state: 'offline' });
       this._scheduleReconnect();
     });
@@ -208,6 +245,7 @@ export class CollabSession {
     // Pipe local Y.Doc updates → server.
     this._docUpdateHandler = (update, origin) => {
       if (origin === this) return; // don't echo our own
+      if (this.role === 'viewer') return;
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         const enc = encoding.createEncoder();
         encoding.writeVarUint(enc, MESSAGE_SYNC);
@@ -263,6 +301,15 @@ export class CollabSession {
             this.helloPayload = payload;
           } else if (payload.type === 'capacity_reached') {
             this.onCapacityReached && this.onCapacityReached(payload);
+          } else if (payload.type === 'role_changed') {
+            this.role = payload.role;
+            this._syncEditorAccess();
+            this.onRoleChanged && this.onRoleChanged(payload);
+          } else if (payload.type === 'access_revoked') {
+            this.revokedPayload = payload;
+            this.shouldReconnect = false;
+            this._notifyAccessRevoked(payload);
+            if (this.ws?.readyState === WebSocket.OPEN) this.ws.close(4004, 'temporarily_removed');
           }
           break;
         }
@@ -274,6 +321,7 @@ export class CollabSession {
 
   importHtml(html) {
     if (!this.editor) return;
+    if (this.role === 'viewer') return;
     this.editor.commands.setContent(html, true);
   }
 

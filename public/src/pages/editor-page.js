@@ -18,6 +18,11 @@ export async function renderEditorPage(main, params) {
   try {
     info = await api('/api/documents/' + params.id);
   } catch (e) {
+    if (e.status === 403 && e.data?.error === 'temporarily_removed') {
+      main.innerHTML = '';
+      showTemporaryRemoval(main, { id: params.id, title: 'this document' }, e.data.restriction || {});
+      return;
+    }
     main.innerHTML = '';
     main.appendChild(h('div', { class: 'callout danger', role: 'alert' }, [
       e.status === 404 ? 'This document does not exist or has not been shared with you.' :
@@ -28,7 +33,10 @@ export async function renderEditorPage(main, params) {
     return;
   }
   const { document: doc, role } = info;
+  const permissions = info.permissions || {};
+  let activeRole = role;
   const isOwner = role === 'owner';
+  const canModerate = !!permissions.canModerate;
 
   main.innerHTML = '';
 
@@ -97,13 +105,13 @@ export async function renderEditorPage(main, params) {
     style: { display: 'flex', alignItems: 'center', gap: '0.4rem' }
   }, [presenceHeading, presenceList, presenceLive]);
 
-  const shareBtn = isOwner
+  const shareBtn = canModerate
     ? h('button', {
         type: 'button',
         class: 'btn btn-primary btn-sm',
         'aria-haspopup': 'dialog',
         onclick: () => openShareDialog(doc)
-      }, ['Share'])
+      }, [isOwner ? 'Share' : 'Manage users'])
     : null;
 
   const exportBtn = h('button', {
@@ -120,9 +128,10 @@ export async function renderEditorPage(main, params) {
     'data-link': ''
   }, [icon('← '), 'All documents']);
 
+  const roleTag = h('span', { class: 'tag' }, [activeRole.charAt(0).toUpperCase() + activeRole.slice(1)]);
   shell.appendChild(h('div', { class: 'editor-meta' }, [
     backBtn, titleInput,
-    h('span', { class: 'tag' }, [role.charAt(0).toUpperCase() + role.slice(1)]),
+    roleTag,
     status,
     h('div', { style: { flex: '1' }, 'aria-hidden': 'true' }),
     presenceWrap,
@@ -130,7 +139,7 @@ export async function renderEditorPage(main, params) {
   ].filter(Boolean)));
 
   // ---- Toolbar (only for editors/owners — viewers see no formatting controls because the editor is read-only) ----
-  const canEdit = role !== 'viewer';
+  let canEdit = activeRole !== 'viewer';
   let toolbar = null;
   if (canEdit) {
     const toolbarHeadingId = nextId('tbar');
@@ -150,11 +159,12 @@ export async function renderEditorPage(main, params) {
   // we keep it only to give the section a stable name and we adjust the wording so
   // viewers (who have no toolbar above) don't hear an instruction that doesn't apply.
   const surfaceLabelId = nextId('surface-lbl');
-  shell.appendChild(h('span', { id: surfaceLabelId, class: 'sr-only' }, [
+  const surfaceLabel = h('span', { id: surfaceLabelId, class: 'sr-only' }, [
     canEdit
       ? 'Document content. Use the formatting toolbar above for rich-text controls.'
       : 'Document content. This document is read-only for your account.'
-  ]));
+  ]);
+  shell.appendChild(surfaceLabel);
   const surface = h('div', {
     class: 'editor-surface',
     'aria-labelledby': surfaceLabelId
@@ -278,6 +288,30 @@ export async function renderEditorPage(main, params) {
       main.appendChild(card);
       announceRoute('This document is full');
       setTimeout(() => card.focus(), 0);
+    },
+    onRoleChanged: (payload) => {
+      activeRole = payload.role || activeRole;
+      canEdit = activeRole !== 'viewer';
+      roleTag.textContent = activeRole.charAt(0).toUpperCase() + activeRole.slice(1);
+      surfaceLabel.textContent = canEdit
+        ? 'Document content. Use the formatting toolbar above for rich-text controls.'
+        : 'Document content. This document is read-only for your account.';
+      if (canEdit && !toolbar) {
+        toast('Editing permissions restored.', 'success');
+        setTimeout(() => renderEditorPage(main, params), 0);
+        return;
+      }
+      if (!canEdit) {
+        if (toolbar) { toolbar.remove(); toolbar = null; }
+        if (importBtn?.isConnected) importBtn.remove();
+        if (shareBtn?.isConnected) shareBtn.remove();
+        const until = payload.expiresAt ? ` until ${new Date(payload.expiresAt).toLocaleString()}` : '';
+        toast(`You are now a viewer${until}.`, 'warning');
+        announce(`You are now a viewer${until}. Editing is disabled.`);
+      }
+    },
+    onAccessRevoked: (payload) => {
+      showTemporaryRemoval(main, doc, payload || {});
     }
   });
   currentSession = session;
@@ -292,6 +326,29 @@ export async function renderEditorPage(main, params) {
 
   document.title = (doc.title || 'Untitled') + ' · Ephesian';
   announceRoute((doc.title || 'Untitled') + ' — document opened');
+}
+
+function showTemporaryRemoval(main, doc, payload = {}) {
+  if (currentSession) {
+    const closing = currentSession;
+    currentSession = null;
+    try { closing.destroy(); } catch {}
+  }
+  main.innerHTML = '';
+  const removedHeading = nextId('removed-h');
+  const until = payload.expiresAt ? new Date(payload.expiresAt).toLocaleString() : '';
+  const card = h('section', { class: 'card callout warning', 'aria-labelledby': removedHeading, tabindex: '-1' }, [
+    h('h1', { id: removedHeading }, ['You have been removed temporarily']),
+    h('p', {}, [
+      until
+        ? `You cannot open "${doc.title || 'this document'}" again until ${until}.`
+        : `You cannot open "${doc.title || 'this document'}" right now.`
+    ]),
+    h('a', { href: '/dashboard', 'data-link': '', class: 'btn' }, ['Back to your documents'])
+  ]);
+  main.appendChild(card);
+  announceRoute('Document access paused');
+  setTimeout(() => card.focus(), 0);
 }
 
 function buildToolbar(toolbar, session) {
@@ -608,33 +665,195 @@ function doImport(doc) {
   input.click();
 }
 
+function openTemporaryActionDialog(doc, share, action, onDone) {
+  const name = share.display_name || share.email;
+  const durationId = nextId('moderation-duration');
+  const errId = nextId('moderation-duration-error');
+  const duration = h('input', {
+    type: 'text',
+    id: durationId,
+    value: '15',
+    inputmode: 'numeric',
+    pattern: '[0-9]*',
+    maxlength: '5',
+    autocomplete: 'off',
+    required: true,
+    'aria-describedby': errId
+  });
+  const err = h('div', {
+    id: errId,
+    class: 'field-error',
+    role: 'alert',
+    'aria-live': 'assertive',
+    hidden: true
+  });
+  const title = action === 'kick' ? `Remove ${name} temporarily` : `Make ${name} a viewer temporarily`;
+  const submitLabel = action === 'kick' ? 'Remove temporarily' : 'Make viewer temporarily';
+  const submit = h('button', {
+    type: 'button',
+    class: action === 'kick' ? 'btn btn-danger' : 'btn btn-primary',
+    onclick: () => form.requestSubmit()
+  }, [submitLabel]);
+  const cancel = h('button', { type: 'button', class: 'btn', onclick: () => m.close() }, ['Cancel']);
+  const form = h('form', {
+    onsubmit: async (e) => {
+      e.preventDefault();
+      err.hidden = true;
+      duration.removeAttribute('aria-invalid');
+      const minutes = Number(duration.value);
+      if (!Number.isFinite(minutes) || minutes < 1 || minutes > 43200) {
+        err.textContent = 'Enter a duration from 1 to 43200 minutes.';
+        err.hidden = false;
+        duration.setAttribute('aria-invalid', 'true');
+        duration.focus();
+        return;
+      }
+      busy(submit, true);
+      try {
+        const r = await api('/api/documents/' + doc.id + '/moderation', {
+          method: 'POST',
+          body: { userId: share.user_id, action, durationMinutes: minutes }
+        });
+        const until = r.restriction?.expiresAt ? ` until ${new Date(r.restriction.expiresAt).toLocaleString()}` : '';
+        toast(action === 'kick' ? `${name} removed${until}.` : `${name} is a viewer${until}.`, 'success');
+        m.close();
+        onDone && onDone();
+      } catch (ex) {
+        err.textContent =
+          ex.data?.error === 'cannot_target_self' ? 'You cannot apply this action to yourself.' :
+          ex.data?.error === 'cannot_target_owner' ? 'The document owner cannot be restricted.' :
+          ex.data?.error === 'target_not_editor' ? 'Only editors can be made temporary viewers.' :
+          ex.data?.error === 'target_temporarily_removed' ? 'This user is already removed temporarily.' :
+          'Could not apply the temporary restriction.';
+        err.hidden = false;
+        duration.setAttribute('aria-invalid', 'true');
+        duration.focus();
+      } finally {
+        busy(submit, false);
+      }
+    }
+  }, [
+    h('div', { class: 'field' }, [
+      h('label', { class: 'field-label', for: durationId }, ['Duration in minutes']),
+      duration,
+      err
+    ])
+  ]);
+  const m = openModal({
+    title,
+    body: form,
+    footer: [cancel, submit],
+    initialFocus: duration
+  });
+}
+
 async function openShareDialog(doc) {
   const data = await api('/api/documents/' + doc.id + '/shares');
+  const permissions = data.permissions || {};
+  const canShare = !!permissions.canShare;
+  const canGrantModeration = !!permissions.canGrantModeration;
+  const canModerate = !!permissions.canModerate;
+  const currentUserId = meUser()?.id;
 
   // ---- People list ----
   const peopleListId = nextId('share-people');
   const list = h('ul', { class: 'share-list', 'aria-labelledby': peopleListId });
   for (const s of data.shares) {
-    const remove = h('button', {
-      type: 'button',
-      class: 'btn btn-sm btn-danger',
-      'aria-label': `Remove ${s.display_name || s.email}`
-    }, ['Remove']);
-    remove.addEventListener('click', async () => {
-      if (!await confirm(
-        'Remove access?',
-        `${s.display_name || s.email} will lose access immediately.`,
-        { confirmLabel: 'Remove', kind: 'danger' }
-      )) return;
-      await api('/api/documents/' + doc.id + '/shares/' + s.user_id, { method: 'DELETE' });
-      rebuild();
-    });
+    const name = s.display_name || s.email;
+    const effectiveRole = s.effective_role || s.role;
+    const restrictionText = s.restriction_action
+      ? `${s.restriction_action === 'kick' ? 'Removed' : 'Viewer'} until ${new Date(s.restriction_expires_at).toLocaleString()}`
+      : '';
+    const actions = [];
+
+    if (canGrantModeration && effectiveRole === 'editor') {
+      const modId = nextId('moderator-grant');
+      const modToggle = h('input', {
+        type: 'checkbox',
+        id: modId,
+        checked: !!s.can_moderate,
+        'aria-label': `Allow ${name} to remove users or make editors temporary viewers`
+      });
+      modToggle.addEventListener('change', async () => {
+        try {
+          await api('/api/documents/' + doc.id + '/shares/' + s.user_id + '/permissions', {
+            method: 'PATCH',
+            body: { canModerate: modToggle.checked }
+          });
+          toast(modToggle.checked ? 'Special permissions granted.' : 'Special permissions revoked.', 'success');
+          rebuild();
+        } catch (e) {
+          modToggle.checked = !modToggle.checked;
+          toast(e.data?.error === 'viewers_cannot_moderate'
+            ? 'Viewers cannot receive special permissions.'
+            : 'Could not update special permissions.', 'error');
+        }
+      });
+      actions.push(h('span', { class: 'permission-toggle' }, [
+        modToggle,
+        h('label', { for: modId }, ['Special permissions'])
+      ]));
+    }
+
+    if (canModerate && s.user_id !== currentUserId && !s.restriction_action) {
+      actions.push(h('button', {
+        type: 'button',
+        class: 'btn btn-sm',
+        'aria-label': `Remove ${name} temporarily`,
+        onclick: () => openTemporaryActionDialog(doc, s, 'kick', rebuild)
+      }, ['Remove temporarily']));
+      if (s.role === 'editor') {
+        actions.push(h('button', {
+          type: 'button',
+          class: 'btn btn-sm',
+          'aria-label': `Make ${name} a temporary viewer`,
+          onclick: () => openTemporaryActionDialog(doc, s, 'viewer', rebuild)
+        }, ['Make viewer temporarily']));
+      }
+    }
+
+    if (canGrantModeration && s.restriction_action) {
+      actions.push(h('button', {
+        type: 'button',
+        class: 'btn btn-sm',
+        'aria-label': `Clear temporary restriction for ${name}`,
+        onclick: async () => {
+          await api('/api/documents/' + doc.id + '/moderation/' + s.user_id, { method: 'DELETE' });
+          toast('Temporary restriction cleared.', 'success');
+          rebuild();
+        }
+      }, ['Clear restriction']));
+    }
+
+    if (canShare) {
+      const remove = h('button', {
+        type: 'button',
+        class: 'btn btn-sm btn-danger',
+        'aria-label': `Remove ${name}`
+      }, ['Remove']);
+      remove.addEventListener('click', async () => {
+        if (!await confirm(
+          'Remove access?',
+          `${name} will lose access immediately.`,
+          { confirmLabel: 'Remove', kind: 'danger' }
+        )) return;
+        await api('/api/documents/' + doc.id + '/shares/' + s.user_id, { method: 'DELETE' });
+        rebuild();
+      });
+      actions.push(remove);
+    }
+
     list.appendChild(h('li', {}, [
-      h('span', {}, [
-        s.display_name || s.email, ' ',
-        h('span', { class: 'tag' }, [s.role === 'viewer' ? 'Viewer' : 'Editor'])
+      h('span', { class: 'share-person' }, [
+        h('span', {}, [name]),
+        h('span', { class: 'share-meta' }, [
+          h('span', { class: 'tag' }, [effectiveRole === 'viewer' ? 'Viewer' : 'Editor']),
+          s.is_guest ? h('span', { class: 'tag viewer' }, ['Guest']) : null,
+          s.can_moderate && effectiveRole === 'editor' ? h('span', { class: 'tag owner' }, ['Special permissions']) : null,
+          restrictionText ? h('span', { class: 'tag viewer' }, [restrictionText]) : null
+        ].filter(Boolean))
       ]),
-      remove
+      h('span', { class: 'share-actions' }, actions)
     ]));
   }
   if (!data.shares.length) {
@@ -815,21 +1034,21 @@ async function openShareDialog(doc) {
   });
 
   const m = openModal({
-    title: `Share "${doc.title}"`,
+    title: canShare ? `Share "${doc.title}"` : `Manage users in "${doc.title}"`,
     body: h('div', {}, [
       h('h3', { id: peopleListId, style: { marginTop: 0 } }, ['People with access']),
       list,
-      h('h3', {}, ['Invite by email']),
-      h('div', { class: 'field' }, [
+      canShare && h('h3', {}, ['Invite by email']),
+      canShare && h('div', { class: 'field' }, [
         h('label', { class: 'field-label', for: emailId }, ['Email address']),
         h('div', { style: { display: 'flex', gap: '0.4rem', flexWrap: 'wrap' } }, [emailInput]),
         emailErr
       ]),
-      h('div', { class: 'field' }, [
+      canShare && h('div', { class: 'field' }, [
         h('label', { class: 'field-label', for: emailRoleId }, ['Role']),
         roleSel
       ]),
-      h('div', {
+      canShare && h('div', {
         class: 'field',
         style: { display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }
       }, [
@@ -843,19 +1062,19 @@ async function openShareDialog(doc) {
           ])
         ])
       ]),
-      h('div', { style: { display: 'flex', justifyContent: 'flex-end' } }, [inviteBtn]),
-      h('p', { class: 'field-help' }, [
+      canShare && h('div', { style: { display: 'flex', justifyContent: 'flex-end' } }, [inviteBtn]),
+      canShare && h('p', { class: 'field-help' }, [
         'Existing users gain access immediately. New users get an email invite they can claim by signing up with the same address, or — when allowed — by joining as a guest.'
       ]),
-      h('h3', { id: linksListId }, ['Invite links']),
-      linksList,
-      h('div', { style: { display: 'grid', gridTemplateColumns: 'auto auto', gap: '0.6rem 0.8rem', alignItems: 'center' } }, [
+      canShare && h('h3', { id: linksListId }, ['Invite links']),
+      canShare && linksList,
+      canShare && h('div', { style: { display: 'grid', gridTemplateColumns: 'auto auto', gap: '0.6rem 0.8rem', alignItems: 'center' } }, [
         h('label', { class: 'field-label', for: linkRoleId }, ['Role']),
         linkRoleSel,
         h('label', { class: 'field-label', for: linkUsesId }, ['Max uses (0 = unlimited)']),
         linkUses
       ]),
-      h('div', {
+      canShare && h('div', {
         class: 'field',
         style: { marginTop: '0.6rem', display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }
       }, [
@@ -869,9 +1088,9 @@ async function openShareDialog(doc) {
           ])
         ])
       ]),
-      h('div', { style: { display: 'flex', justifyContent: 'flex-end', marginTop: '0.6rem' } }, [linkBtn]),
-      h('h3', {}, ['Capacity limit']),
-      h('div', { class: 'field' }, [
+      canShare && h('div', { style: { display: 'flex', justifyContent: 'flex-end', marginTop: '0.6rem' } }, [linkBtn]),
+      canShare && h('h3', {}, ['Capacity limit']),
+      canShare && h('div', { class: 'field' }, [
         h('label', { class: 'field-label', for: capId }, ['Maximum simultaneous collaborators']),
         h('div', { style: { display: 'flex', gap: '0.4rem', alignItems: 'center' } }, [capInput, capBtn]),
         h('div', { class: 'field-help', id: capHelpId }, [

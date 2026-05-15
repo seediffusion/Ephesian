@@ -12,6 +12,7 @@ const MESSAGE_AWARENESS = 1;
 const MESSAGE_AUTH = 2;
 const MESSAGE_QUERY_AWARENESS = 3;
 const MESSAGE_PRESENCE_SUMMARY = 100;
+const CLOSE_TEMPORARILY_REMOVED = 4004;
 
 const PING_TIMEOUT_MS = 30_000;
 const PERSIST_DEBOUNCE_MS = 1500;
@@ -134,6 +135,64 @@ export function docCapacityInUse(docId) {
   return d ? d.countParticipants() : 0;
 }
 
+export function applyDocumentModeration(docId, userId, restriction) {
+  const doc = docs.get(docId);
+  if (!doc || !restriction) return;
+  const expiresAt = restriction.expires_at || restriction.expiresAt || null;
+  scheduleRestrictionExpiryRefresh(docId, userId, expiresAt);
+  for (const [ws, meta] of doc.conns.entries()) {
+    if (meta.userId !== userId) continue;
+    if (restriction.action === 'kick') {
+      sendPresencePayload(ws, {
+        type: 'access_revoked',
+        reason: 'temporarily_removed',
+        expiresAt
+      });
+      closeWith(ws, CLOSE_TEMPORARILY_REMOVED, 'temporarily_removed');
+    } else if (restriction.action === 'viewer') {
+      meta.role = 'viewer';
+      sendPresencePayload(ws, {
+        type: 'role_changed',
+        role: 'viewer',
+        expiresAt
+      });
+    }
+  }
+  doc.broadcastPresenceSummary();
+}
+
+function scheduleRestrictionExpiryRefresh(docId, userId, expiresAt) {
+  if (!expiresAt) return;
+  const delay = Math.max(0, Number(expiresAt) - Date.now() + 1000);
+  const timer = setTimeout(() => refreshDocumentUserAccess(docId, userId), delay);
+  timer.unref?.();
+}
+
+export function refreshDocumentUserAccess(docId, userId) {
+  const doc = docs.get(docId);
+  if (!doc) return;
+  const access = getDocumentAccess(docId, userId, { includeDenied: true });
+  for (const [ws, meta] of doc.conns.entries()) {
+    if (meta.userId !== userId) continue;
+    if (!access || access.denied) {
+      sendPresencePayload(ws, {
+        type: 'access_revoked',
+        reason: 'temporarily_removed',
+        expiresAt: access?.restriction?.expires_at || null
+      });
+      closeWith(ws, CLOSE_TEMPORARILY_REMOVED, 'temporarily_removed');
+      continue;
+    }
+    meta.role = access.role;
+    sendPresencePayload(ws, {
+      type: 'role_changed',
+      role: access.role,
+      expiresAt: access.restriction?.expires_at || null
+    });
+  }
+  doc.broadcastPresenceSummary();
+}
+
 function colorFor(userId) {
   const palette = ['#e57373','#ba68c8','#7986cb','#4dd0e1','#81c784','#ffb74d','#a1887f','#90a4ae','#f06292','#9575cd'];
   let h = 0;
@@ -143,6 +202,17 @@ function colorFor(userId) {
 
 function send(ws, data) {
   if (ws.readyState === ws.OPEN) ws.send(data);
+}
+
+function encodePresencePayload(payload) {
+  const enc = encoding.createEncoder();
+  encoding.writeVarUint(enc, MESSAGE_PRESENCE_SUMMARY);
+  encoding.writeVarString(enc, JSON.stringify(payload));
+  return encoding.toUint8Array(enc);
+}
+
+function sendPresencePayload(ws, payload) {
+  send(ws, encodePresencePayload(payload));
 }
 
 function sendSyncStep1(ws, doc) {
@@ -228,9 +298,9 @@ export function attachCollabServer(httpServer) {
       socket.destroy();
       return;
     }
-    const access = getDocumentAccess(docId, session.userId);
-    if (!access) {
-      socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
+    const access = getDocumentAccess(docId, session.userId, { includeDenied: true });
+    if (!access || access.denied) {
+      socket.write(`HTTP/1.1 ${access?.denied ? '403 Forbidden' : '404 Not Found'}\r\n\r\n`);
       socket.destroy();
       return;
     }
@@ -244,14 +314,11 @@ export function attachCollabServer(httpServer) {
       // If the user is already connected, they're "rejoining" — don't count against capacity.
       const alreadyPresent = [...doc.conns.values()].some(m => m.userId === session.userId);
       if (cap > 0 && !alreadyPresent && doc.countParticipants() >= cap) {
-        const enc = encoding.createEncoder();
-        encoding.writeVarUint(enc, MESSAGE_PRESENCE_SUMMARY);
-        encoding.writeVarString(enc, JSON.stringify({
+        sendPresencePayload(ws, {
           type: 'capacity_reached',
           capacity: cap,
           current: doc.countParticipants()
-        }));
-        send(ws, encoding.toUint8Array(enc));
+        });
         closeWith(ws, 4003, 'capacity_reached');
         return;
       }
@@ -303,14 +370,11 @@ export function attachCollabServer(httpServer) {
       doc.broadcastPresenceSummary();
 
       // Send a JSON "hello" with role/color so the client can theme itself.
-      const helloEnc = encoding.createEncoder();
-      encoding.writeVarUint(helloEnc, MESSAGE_PRESENCE_SUMMARY);
-      encoding.writeVarString(helloEnc, JSON.stringify({
+      sendPresencePayload(ws, {
         type: 'hello',
         you: meta,
         capacity: cap
-      }));
-      send(ws, encoding.toUint8Array(helloEnc));
+      });
     });
   });
 

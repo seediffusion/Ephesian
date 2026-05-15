@@ -4,16 +4,20 @@ import {
   listDocumentsForUser, getDocumentAccess, createDocument, getDocument,
   setDocumentTitle, setDocumentCapacity, deleteDocument,
   listShares, addShareByUserId, removeShare,
+  getShare, setShareCanModerate,
+  setDocumentUserRestriction, clearDocumentUserRestriction,
   createInviteLink, listInviteLinks, revokeInviteLink,
   createEmailInvite, consumeEmailInvite, consumeInviteLink,
   effectiveCapacity, getYDocState, saveYDocState
 } from '../lib/documents.js';
-import { docCapacityInUse } from '../lib/collab.js';
+import { applyDocumentModeration, docCapacityInUse, refreshDocumentUserAccess } from '../lib/collab.js';
 import { config } from '../lib/config.js';
 import { sendMail } from '../lib/email.js';
 import * as Y from 'yjs';
 
 const router = express.Router();
+const MIN_MODERATION_DURATION_MS = 60 * 1000;
+const MAX_MODERATION_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 
 function requireUser(req, res) {
   if (!req.user) { res.status(401).json({ error: 'auth_required' }); return null; }
@@ -41,6 +45,37 @@ function requireOwner(req, res) {
   return { user: u, doc: a.document };
 }
 
+function requireDocumentModerator(req, res) {
+  const u = requireVerifiedUser(req, res); if (!u) return null;
+  const a = getDocumentAccess(req.params.id, u.id, { includeDenied: true });
+  if (!a) { res.status(404).json({ error: 'not_found' }); return null; }
+  if (a.denied) {
+    res.status(403).json({
+      error: a.denied,
+      restriction: publicRestriction(a.restriction)
+    });
+    return null;
+  }
+  if (!a.canModerate) { res.status(403).json({ error: 'forbidden' }); return null; }
+  return { user: u, doc: a.document, access: a };
+}
+
+function publicRestriction(restriction) {
+  if (!restriction) return null;
+  return {
+    action: restriction.action,
+    expiresAt: restriction.expires_at
+  };
+}
+
+function parseModerationDuration(body) {
+  const minutes = Number(body?.durationMinutes);
+  if (!Number.isFinite(minutes)) return null;
+  const ms = Math.round(minutes * 60 * 1000);
+  if (ms < MIN_MODERATION_DURATION_MS || ms > MAX_MODERATION_DURATION_MS) return null;
+  return ms;
+}
+
 router.get('/', (req, res) => {
   const u = requireUser(req, res); if (!u) return;
   res.json({ documents: listDocumentsForUser(u.id) });
@@ -56,8 +91,14 @@ router.post('/', express.json(), (req, res) => {
 
 router.get('/:id', (req, res) => {
   const u = requireUser(req, res); if (!u) return;
-  const a = getDocumentAccess(req.params.id, u.id);
+  const a = getDocumentAccess(req.params.id, u.id, { includeDenied: true });
   if (!a) return res.status(404).json({ error: 'not_found' });
+  if (a.denied) {
+    return res.status(403).json({
+      error: a.denied,
+      restriction: publicRestriction(a.restriction)
+    });
+  }
   res.json({
     document: {
       id: a.document.id,
@@ -69,7 +110,14 @@ router.get('/:id', (req, res) => {
       createdAt: a.document.created_at,
       updatedAt: a.document.updated_at
     },
-    role: a.role
+    role: a.role,
+    baseRole: a.baseRole,
+    permissions: {
+      canModerate: !!a.canModerate,
+      canGrantModeration: a.role === 'owner',
+      canShare: a.role === 'owner'
+    },
+    restriction: publicRestriction(a.restriction)
   });
 });
 
@@ -98,16 +146,86 @@ router.delete('/:id', (req, res) => {
 // --- Sharing ---------------------------------------------------------
 
 router.get('/:id/shares', (req, res) => {
-  const ctx = requireOwner(req, res); if (!ctx) return;
+  const ctx = requireDocumentModerator(req, res); if (!ctx) return;
+  const isOwner = ctx.access.role === 'owner';
   res.json({
     shares: listShares(ctx.doc.id),
-    invites: listInviteLinks(ctx.doc.id)
+    invites: isOwner ? listInviteLinks(ctx.doc.id) : [],
+    permissions: {
+      canModerate: true,
+      canGrantModeration: isOwner,
+      canShare: isOwner
+    }
   });
 });
 
 router.delete('/:id/shares/:userId', (req, res) => {
   const ctx = requireOwner(req, res); if (!ctx) return;
   removeShare(ctx.doc.id, req.params.userId);
+  refreshDocumentUserAccess(ctx.doc.id, req.params.userId);
+  res.json({ ok: true });
+});
+
+router.patch('/:id/shares/:userId/permissions', express.json(), (req, res) => {
+  const ctx = requireOwner(req, res); if (!ctx) return;
+  if (req.params.userId === ctx.doc.owner_id) {
+    return res.status(400).json({ error: 'owner_has_permissions' });
+  }
+  if (req.body?.canModerate) {
+    const targetAccess = getDocumentAccess(ctx.doc.id, req.params.userId, { includeDenied: true });
+    if (targetAccess?.role !== 'editor') {
+      return res.status(400).json({ error: 'viewers_cannot_moderate' });
+    }
+  }
+  const result = setShareCanModerate(ctx.doc.id, req.params.userId, !!req.body?.canModerate);
+  if (!result.ok) {
+    return res.status(result.reason === 'not_found' ? 404 : 400).json({ error: result.reason });
+  }
+  refreshDocumentUserAccess(ctx.doc.id, req.params.userId);
+  res.json({ ok: true });
+});
+
+router.post('/:id/moderation', express.json(), (req, res) => {
+  const ctx = requireDocumentModerator(req, res); if (!ctx) return;
+  const targetUserId = String(req.body?.userId || '');
+  const action = req.body?.action === 'viewer' ? 'viewer' : req.body?.action === 'kick' ? 'kick' : null;
+  const durationMs = parseModerationDuration(req.body);
+  if (!targetUserId || !action || !durationMs) {
+    return res.status(400).json({
+      error: 'invalid_input',
+      minDurationMinutes: MIN_MODERATION_DURATION_MS / 60000,
+      maxDurationMinutes: MAX_MODERATION_DURATION_MS / 60000
+    });
+  }
+  if (targetUserId === ctx.user.id) return res.status(400).json({ error: 'cannot_target_self' });
+
+  const targetAccess = getDocumentAccess(ctx.doc.id, targetUserId, { includeDenied: true });
+  const targetShare = getShare(ctx.doc.id, targetUserId);
+  if (!targetAccess && !targetShare) return res.status(404).json({ error: 'target_not_found' });
+  if (targetAccess?.denied && action !== 'kick') {
+    return res.status(400).json({ error: 'target_temporarily_removed' });
+  }
+  if (targetAccess?.baseRole === 'owner' || targetUserId === ctx.doc.owner_id) {
+    return res.status(400).json({ error: 'cannot_target_owner' });
+  }
+  const targetBaseRole = targetAccess?.baseRole || targetShare?.role;
+  if (action === 'viewer' && targetBaseRole !== 'editor') {
+    return res.status(400).json({ error: 'target_not_editor' });
+  }
+
+  const restriction = setDocumentUserRestriction(ctx.doc.id, targetUserId, {
+    action,
+    expiresAt: nowMs() + durationMs,
+    createdBy: ctx.user.id
+  });
+  applyDocumentModeration(ctx.doc.id, targetUserId, restriction);
+  res.json({ ok: true, restriction: publicRestriction(restriction) });
+});
+
+router.delete('/:id/moderation/:userId', (req, res) => {
+  const ctx = requireOwner(req, res); if (!ctx) return;
+  clearDocumentUserRestriction(ctx.doc.id, req.params.userId);
+  refreshDocumentUserAccess(ctx.doc.id, req.params.userId);
   res.json({ ok: true });
 });
 
@@ -125,6 +243,7 @@ router.post('/:id/invite-email', express.json(), async (req, res) => {
       return res.status(400).json({ error: 'cannot_invite_owner' });
     }
     addShareByUserId(ctx.doc.id, existingUser.id, role);
+    refreshDocumentUserAccess(ctx.doc.id, existingUser.id);
     await sendMail({
       to: email,
       subject: `${ctx.user.displayName} shared a document with you on ${config.appName}`,

@@ -10,7 +10,7 @@ The name is borrowed from the New Testament Letter to the Ephesians, which  teac
 
 ## Ephesian features
 
-Ephesian is a fully-featured document collaboration tool. You can create documents, edit them together with other people in real time, see each other's cursors, share documents by email or by invite link, set a limit on how many people can be inside a single document at once, import and export Microsoft Word, HTML, Markdown, and plain text, and keep working in the browser when you lose your network connection — Ephesian syncs your changes back to the server as soon as you reconnect. Accounts are protected with argon2id password hashing, email verification, secure password reset links, and a choice of two-factor methods including authenticator apps, security keys and passkeys, email codes, and one-time backup codes. SMS is not supported, by design.
+Ephesian is a fully-featured document collaboration tool. You can create documents, edit them together with other people in real time, see each other's cursors, share documents by email or by invite link, give trusted editors temporary moderation powers, set a limit on how many people can be inside a single document at once, import and export Microsoft Word, HTML, Markdown, and plain text, and keep working in the browser when you lose your network connection — Ephesian syncs your changes back to the server as soon as you reconnect. Accounts are protected with argon2id password hashing, email verification, secure password reset links, and a choice of two-factor methods including authenticator apps, security keys and passkeys, email codes, and one-time backup codes. SMS is not supported, by design.
 
 ## Running Ephesian
 
@@ -136,6 +136,19 @@ A guest session lasts for the browser session only. If a guest closes the tab, r
 
 Guests cannot create their own documents, cannot share documents they have been invited to, and cannot manage 2FA.
 
+### Managing collaborators
+
+Document owners can manage everyone with direct access from the Share dialog. Owners can remove a collaborator permanently, change invite links, set the capacity limit, and grant or revoke special permissions for trusted editors.
+
+Special permissions let an editor help moderate a single document. They are document-specific and must be granted manually by the owner. An editor with special permissions can:
+
+* Remove a collaborator from the document for a chosen amount of time.
+* Make an editor a temporary viewer for a chosen amount of time.
+
+Document owners always have these permissions automatically. Viewers cannot receive special permissions. A temporary viewer restriction disables editing immediately in any open tab and the editor surface becomes read-only. A temporary removal disconnects the user from the document and keeps them out until the restriction expires or the owner clears it. Temporary restrictions can last from 1 minute to 30 days.
+
+Editors with special permissions see a Manage users button instead of the owner's full Share dialog. They can use moderation actions, but they cannot invite new people, remove permanent access, grant special permissions to others, clear restrictions, change invite links, or change the capacity limit.
+
 ## Setting a collaborator limit
 
 Each document has a collaborator limit which controls how many distinct people can be inside the document at the same time. The default is unlimited (0). Anyone who tries to join while the document is full is politely told the document is at capacity and asked to try again later, or to ask the owner to raise the limit.
@@ -212,6 +225,7 @@ Ephesian has been rigorously tested to ensure it is as accessible as possible fo
 * Every on-screen element, be it a button, a text field, or a checkbox, has a clear screen reader label.
 * Modal dialogs keep focus and gracefully restore it when closed.
 * The formatting toolbar follows the ARIA toolbar pattern with arrow-key navigation.
+* Collaboration management controls have user-specific accessible names, so repeated actions such as "Remove temporarily" and "Make viewer temporarily" are announced with the collaborator's name.
 * Route changes are announced to screen readers, including the new page title.
 * Connection status updates are politely live-regioned and debounced, so screen readers are not constantly interrupted or spammed.
 * Presence updates announce who joined and left, with natural pluralisation.
@@ -241,7 +255,7 @@ Caddy handles the TLS certificate for you. Other reverse proxies work the same w
 
 ## Backup and restore
 
-All of your data — accounts, documents, sessions, invite links, and 2FA secrets — lives in two places.
+All of your data — accounts, documents, sessions, invite links, special permission grants, temporary document restrictions, and 2FA secrets — lives in two places.
 
 * The SQLite database at `data/ephesian.db`.
 * The `.env` file at the root of the Ephesian folder.
