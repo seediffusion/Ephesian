@@ -233,7 +233,7 @@ export async function renderEditorPage(main, params) {
       if (list.length > 6) {
         presenceList.appendChild(h('li', {
           class: 'presence-avatar',
-          style: { backgroundColor: '#888' }
+          style: { backgroundColor: '#475569' }
         }, [
           h('span', { 'aria-hidden': 'true' }, ['+' + (list.length - 6)]),
           srOnly(`and ${list.length - 6} more`)
@@ -349,7 +349,7 @@ function buildToolbar(toolbar, session) {
     { type: 'btn', name: 'Insert or remove link', glyph: 'Link',
       cmd: () => promptLink(editor) },
     { type: 'btn', name: 'Insert table', glyph: 'Table',
-      cmd: () => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() }
+      cmd: () => promptTable(editor) }
   ];
 
   toolbar.innerHTML = '';
@@ -481,6 +481,70 @@ function promptLink(editor) {
   });
 }
 
+function promptTable(editor) {
+  const nameId = nextId('table-name');
+  const errId = nextId('table-name-error');
+  const nameInput = h('input', {
+    type: 'text',
+    id: nameId,
+    maxlength: '120',
+    autocomplete: 'off',
+    required: true,
+    'aria-describedby': errId
+  });
+  const err = h('div', {
+    id: errId,
+    class: 'field-error',
+    role: 'alert',
+    'aria-live': 'assertive',
+    hidden: true
+  });
+
+  const insert = h('button', {
+    type: 'button',
+    class: 'btn btn-primary',
+    onclick: () => form.requestSubmit()
+  }, ['Insert table']);
+  const cancel = h('button', {
+    type: 'button',
+    class: 'btn',
+    onclick: () => m.close()
+  }, ['Cancel']);
+  const form = h('form', {
+    onsubmit: (e) => {
+      e.preventDefault();
+      err.hidden = true;
+      nameInput.removeAttribute('aria-invalid');
+      const name = nameInput.value.trim();
+      if (!name) {
+        err.textContent = 'Enter a table name.';
+        err.hidden = false;
+        nameInput.setAttribute('aria-invalid', 'true');
+        nameInput.focus();
+        return;
+      }
+      editor.chain()
+        .focus()
+        .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+        .updateAttributes('table', { accessibleName: name })
+        .run();
+      m.close();
+    }
+  }, [
+    h('div', { class: 'field' }, [
+      h('label', { class: 'field-label', for: nameId }, ['Table name']),
+      nameInput
+    ]),
+    err
+  ]);
+  const m = openModal({
+    title: 'Insert table',
+    body: form,
+    footer: [cancel, insert],
+    initialFocus: nameInput
+  });
+}
+
 function openExportMenu(doc) {
   const html = currentSession?.getHtml() || '';
   const formats = [
@@ -579,6 +643,7 @@ async function openShareDialog(doc) {
 
   // ---- Invite by email ----
   const emailId = nextId('share-email');
+  const emailErrId = nextId('share-email-error');
   const emailRoleId = nextId('share-role');
   const emailGuestsId = nextId('share-email-guests');
   const emailGuestsHelpId = nextId('share-email-guests-help');
@@ -586,7 +651,15 @@ async function openShareDialog(doc) {
     type: 'email', id: emailId,
     placeholder: 'name@example.com',
     autocomplete: 'email',
-    inputmode: 'email'
+    inputmode: 'email',
+    'aria-describedby': emailErrId
+  });
+  const emailErr = h('div', {
+    id: emailErrId,
+    class: 'field-error',
+    role: 'alert',
+    'aria-live': 'assertive',
+    hidden: true
   });
   const roleSel = h('select', { id: emailRoleId }, [
     h('option', { value: 'editor' }, ['Editor']),
@@ -600,6 +673,8 @@ async function openShareDialog(doc) {
   });
   const inviteBtn = h('button', { type: 'button', class: 'btn btn-primary' }, ['Send invitation']);
   inviteBtn.addEventListener('click', async () => {
+    emailErr.hidden = true;
+    emailInput.removeAttribute('aria-invalid');
     busy(inviteBtn, true);
     try {
       const r = await api('/api/documents/' + doc.id + '/invite-email', {
@@ -614,7 +689,14 @@ async function openShareDialog(doc) {
       emailInput.value = '';
       rebuild();
     } catch (e) {
-      toast('Could not invite: ' + (e.data?.error || e.message), 'error');
+      emailErr.textContent = e.data?.error === 'invalid_email'
+        ? 'Enter a valid email address.'
+        : e.data?.error === 'too_many_attempts'
+          ? 'Too many invitation attempts. Please wait a few minutes.'
+          : 'Could not invite: ' + (e.data?.error || e.message || 'error');
+      emailErr.hidden = false;
+      emailInput.setAttribute('aria-invalid', 'true');
+      emailInput.focus();
     } finally { busy(inviteBtn, false); }
   });
 
@@ -629,7 +711,7 @@ async function openShareDialog(doc) {
     const isActive = status === 'Active';
     const copy = h('button', {
       type: 'button', class: 'btn btn-sm',
-      'aria-label': `Copy ${isActive ? 'active ' : status.toLowerCase() + ' '}invite link`
+      'aria-label': `Copy link for ${isActive ? 'active' : status.toLowerCase()} invite`
     }, ['Copy link']);
     copy.addEventListener('click', () => {
       navigator.clipboard.writeText(url);
@@ -740,7 +822,8 @@ async function openShareDialog(doc) {
       h('h3', {}, ['Invite by email']),
       h('div', { class: 'field' }, [
         h('label', { class: 'field-label', for: emailId }, ['Email address']),
-        h('div', { style: { display: 'flex', gap: '0.4rem', flexWrap: 'wrap' } }, [emailInput])
+        h('div', { style: { display: 'flex', gap: '0.4rem', flexWrap: 'wrap' } }, [emailInput]),
+        emailErr
       ]),
       h('div', { class: 'field' }, [
         h('label', { class: 'field-label', for: emailRoleId }, ['Role']),

@@ -33,14 +33,15 @@ export function renderResetPassword(main, search) {
     autocomplete: 'new-password',
     minlength: '10',
     required: true,
-    'aria-describedby': passHelpId
+    'aria-describedby': `${passHelpId} ${errId}`
   });
   const passConfirm = h('input', {
     type: 'password',
     id: 'reset-password2',
     autocomplete: 'new-password',
     minlength: '10',
-    required: true
+    required: true,
+    'aria-describedby': errId
   });
   const submit = h('button', { type: 'submit', class: 'btn btn-primary' }, ['Update password']);
 

@@ -25,7 +25,7 @@ export function renderForgotPassword(main) {
     autocomplete: 'email',
     required: true,
     inputmode: 'email',
-    'aria-describedby': helpId
+    'aria-describedby': `${helpId} ${errId}`
   });
   const submit = h('button', { type: 'submit', class: 'btn btn-primary' }, ['Send reset link']);
 

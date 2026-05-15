@@ -20,7 +20,7 @@ export async function renderVerify(main, search) {
     maxlength: '6',
     pattern: '\\d{6}',
     required: true,
-    'aria-describedby': helpId
+    'aria-describedby': `${helpId} ${errId}`
   });
   const err = h('div', {
     id: errId,

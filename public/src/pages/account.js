@@ -51,7 +51,8 @@ function buildPasswordForm() {
     type: 'password',
     id: 'pw-current',
     autocomplete: 'current-password',
-    required: true
+    required: true,
+    'aria-describedby': errId
   });
   const next1 = h('input', {
     type: 'password',
@@ -59,14 +60,15 @@ function buildPasswordForm() {
     autocomplete: 'new-password',
     minlength: '10',
     required: true,
-    'aria-describedby': newHelpId
+    'aria-describedby': `${newHelpId} ${errId}`
   });
   const next2 = h('input', {
     type: 'password',
     id: 'pw-confirm',
     autocomplete: 'new-password',
     minlength: '10',
-    required: true
+    required: true,
+    'aria-describedby': errId
   });
   const err = h('div', {
     id: errId,
@@ -190,7 +192,7 @@ async function renderTwoFA(container, user) {
     renderTwoFA(container, user);
   }));
 
-  const regen = h('button', { class: 'btn btn-sm' }, ['Generate or replace backup codes']);
+  const regen = h('button', { type: 'button', class: 'btn btn-sm' }, ['Generate or replace backup codes']);
   regen.addEventListener('click', async () => {
     if (!await confirm(
       'Generate new backup codes?',
@@ -246,7 +248,8 @@ async function setupTotp() {
       inputmode: 'numeric',
       maxlength: '6',
       pattern: '\\d{6}',
-      autocomplete: 'one-time-code'
+      autocomplete: 'one-time-code',
+      'aria-describedby': errId
     });
     const err = h('div', {
       id: errId,

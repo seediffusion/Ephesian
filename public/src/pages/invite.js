@@ -123,12 +123,14 @@ export async function renderLinkInvite(main, params) {
 function promptGuestJoin(endpointPath) {
   const inputId = nextId('guest-name');
   const errId = nextId('guest-err');
+  const helpId = nextId('guest-help');
   const input = h('input', {
     type: 'text',
     id: inputId,
     autocomplete: 'nickname',
     maxlength: '60',
-    placeholder: 'Your name as it will appear to others'
+    placeholder: 'Your name as it will appear to others',
+    'aria-describedby': `${helpId} ${errId}`
   });
   const err = h('div', {
     id: errId,
@@ -194,7 +196,7 @@ function promptGuestJoin(endpointPath) {
     h('div', { class: 'field' }, [
       h('label', { class: 'field-label', for: inputId }, ['Display name']),
       input,
-      h('p', { class: 'field-help' }, [
+      h('p', { class: 'field-help', id: helpId }, [
         'This is what other collaborators will see next to your cursor.'
       ])
     ]),

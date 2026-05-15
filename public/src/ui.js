@@ -112,7 +112,8 @@ export function openModal({ title, body, footer, onClose, describedBy, initialFo
   const descId = nextId('modal-desc');
 
   let bodyNode = body;
-  if (typeof body === 'string') bodyNode = h('div', { html: body });
+  const bodyIsPlainText = typeof body === 'string';
+  if (bodyIsPlainText) bodyNode = h('div', { html: body });
 
   // The visible glyph is decorative; the accessible name is "Close dialog".
   const closeBtn = h('button', {
@@ -133,7 +134,7 @@ export function openModal({ title, body, footer, onClose, describedBy, initialFo
     tabindex: '-1'
   };
   if (describedBy) dialogAttrs['aria-describedby'] = describedBy;
-  else dialogAttrs['aria-describedby'] = descId;
+  else if (bodyIsPlainText) dialogAttrs['aria-describedby'] = descId;
 
   const dialog = h('div', dialogAttrs, [
     h('div', { class: 'modal-header' }, [headerH2, closeBtn]),

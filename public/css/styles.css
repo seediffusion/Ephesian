@@ -5,7 +5,7 @@
   --color-text: #15171c;
   --color-text-muted: #4b5260;
   --color-border: #d8dbe2;
-  --color-border-strong: #b6bbc6;
+  --color-border-strong: #8a91a0;
   --color-accent: #1d4ed8;
   --color-accent-hover: #1e40af;
   --color-accent-soft: #c7d7ff;
@@ -37,7 +37,7 @@
     --color-text: #f0f2f6;
     --color-text-muted: #b6bcc9;
     --color-border: #3a4150;
-    --color-border-strong: #525a6c;
+    --color-border-strong: #687287;
     --color-accent: #9bc1ff;
     --color-accent-hover: #b9d2ff;
     --color-accent-soft: #1f3f6d;
@@ -60,7 +60,7 @@
   --color-text: #f0f2f6;
   --color-text-muted: #b6bcc9;
   --color-border: #3a4150;
-  --color-border-strong: #525a6c;
+  --color-border-strong: #687287;
   --color-accent: #9bc1ff;
   --color-accent-hover: #b9d2ff;
   --color-accent-soft: #1f3f6d;
@@ -148,6 +148,13 @@ input, textarea, select {
   padding: 0.55rem 0.7rem;
   width: 100%;
 }
+input[type="checkbox"],
+input[type="radio"] {
+  width: auto;
+  min-width: 1.5rem;
+  min-height: 1.5rem;
+  accent-color: var(--color-accent);
+}
 textarea { min-height: 5rem; resize: vertical; }
 
 input:focus, textarea:focus, select:focus, button:focus-visible, a:focus-visible, [tabindex]:focus-visible {
@@ -184,6 +191,8 @@ input:focus, textarea:focus, select:focus, button:focus-visible, a:focus-visible
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.6rem;
   padding: 0.6rem 1rem;
   background: var(--color-panel);
   border-bottom: 1px solid var(--color-border);
@@ -198,7 +207,7 @@ input:focus, textarea:focus, select:focus, button:focus-visible, a:focus-visible
 }
 .brand-mark { width: 1.4rem; height: 1.4rem; color: var(--color-accent); }
 .brand-name { font-size: 1.05rem; }
-.app-nav { display: flex; align-items: center; gap: 0.6rem; }
+.app-nav { display: flex; align-items: center; justify-content: flex-end; gap: 0.6rem; flex-wrap: wrap; }
 .theme-toggle {
   width: 2.5rem; height: 2.5rem; padding: 0; justify-content: center;
 }
@@ -259,6 +268,7 @@ input:focus, textarea:focus, select:focus, button:focus-visible, a:focus-visible
 .auth-page h1 { margin-top: 0; font-size: 1.5rem; }
 .auth-page .form-actions {
   display: flex; gap: 0.6rem; align-items: center; justify-content: space-between;
+  flex-wrap: wrap;
   margin-top: 1rem;
 }
 
@@ -435,7 +445,7 @@ input:focus, textarea:focus, select:focus, button:focus-visible, a:focus-visible
 }
 
 .editor-surface {
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border-strong);
   border-radius: var(--radius);
   background: var(--color-panel);
   padding: 2rem 3rem;
@@ -443,6 +453,11 @@ input:focus, textarea:focus, select:focus, button:focus-visible, a:focus-visible
   /* When ProseMirror scrolls focus into view, leave room for our outline + ring. */
   scroll-padding-top: 1rem;
   scroll-padding-bottom: 1rem;
+}
+.editor-surface:focus-within {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 5px var(--color-panel);
 }
 .ProseMirror {
   min-height: 100%;
@@ -472,6 +487,13 @@ input:focus, textarea:focus, select:focus, button:focus-visible, a:focus-visible
   border-collapse: collapse;
   margin: 0.5rem 0;
   width: 100%;
+}
+.ProseMirror caption {
+  caption-side: top;
+  text-align: left;
+  font-weight: 600;
+  padding: 0.2rem 0;
+  color: var(--color-text);
 }
 .ProseMirror th, .ProseMirror td {
   border: 1px solid var(--color-border-strong);
@@ -535,7 +557,7 @@ input:focus, textarea:focus, select:focus, button:focus-visible, a:focus-visible
 .modal-footer {
   padding: 0.8rem 1.2rem;
   border-top: 1px solid var(--color-border);
-  display: flex; gap: 0.5rem; justify-content: flex-end;
+  display: flex; gap: 0.5rem; justify-content: flex-end; flex-wrap: wrap;
 }
 
 .kbd {
@@ -550,11 +572,15 @@ input:focus, textarea:focus, select:focus, button:focus-visible, a:focus-visible
 
 .share-list { list-style: none; padding: 0; margin: 0; }
 .share-list li {
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
   padding: 0.4rem 0; border-bottom: 1px solid var(--color-border);
   gap: 0.5rem;
 }
 .share-list li:last-child { border-bottom: none; }
+.share-list li > span:first-child {
+  min-width: min(100%, 14rem);
+  overflow-wrap: anywhere;
+}
 
 .code-blob {
   font-family: var(--font-mono);

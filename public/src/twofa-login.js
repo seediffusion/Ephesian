@@ -22,7 +22,7 @@ export function runSecondFactor(factors) {
       inputmode: 'numeric',
       autocomplete: 'one-time-code',
       maxlength: '20',
-      'aria-describedby': helperId
+      'aria-describedby': `${helperId} ${errId}`
     });
 
     let modeButtons = [];
