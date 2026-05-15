@@ -83,10 +83,24 @@ CREATE TABLE IF NOT EXISTS document_shares (
   document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   role TEXT NOT NULL DEFAULT 'editor',
+  can_moderate INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
   UNIQUE(document_id, user_id)
 );
 CREATE INDEX IF NOT EXISTS idx_shares_user ON document_shares(user_id);
+
+CREATE TABLE IF NOT EXISTS document_user_restrictions (
+  id TEXT PRIMARY KEY,
+  document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  action TEXT NOT NULL,
+  expires_at INTEGER NOT NULL,
+  created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at INTEGER NOT NULL,
+  UNIQUE(document_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_document_user_restrictions_lookup
+  ON document_user_restrictions(document_id, user_id, expires_at);
 
 CREATE TABLE IF NOT EXISTS invite_links (
   token TEXT PRIMARY KEY,
@@ -132,8 +146,10 @@ function ensureColumn(table, column, definition) {
   }
 }
 ensureColumn('users', 'is_guest', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('document_shares', 'can_moderate', 'INTEGER NOT NULL DEFAULT 0');
 ensureColumn('invite_links', 'allow_guests', 'INTEGER NOT NULL DEFAULT 1');
 ensureColumn('email_invites', 'allow_guests', 'INTEGER NOT NULL DEFAULT 1');
+db.prepare("UPDATE document_shares SET can_moderate = 0 WHERE role <> 'editor'").run();
 
 export function nowMs() { return Date.now(); }
 
@@ -143,6 +159,7 @@ export function pruneExpired() {
   db.prepare('DELETE FROM email_tokens WHERE expires_at < ?').run(now);
   db.prepare('DELETE FROM webauthn_challenges WHERE expires_at < ?').run(now);
   db.prepare('DELETE FROM rate_limits WHERE reset_at < ?').run(now);
+  db.prepare('DELETE FROM document_user_restrictions WHERE expires_at < ?').run(now);
   // Guest users have no further sessions once their original session expires;
   // garbage-collect them so the users table doesn't grow indefinitely.
   db.prepare(`
