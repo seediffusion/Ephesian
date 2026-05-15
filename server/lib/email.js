@@ -22,14 +22,21 @@ export async function sendMail({ to, subject, text, html }) {
     logToConsole(subject, to, text || stripHtml(html));
     return { delivered: false, console: true };
   }
-  await transporter.sendMail({
+  const info = await transporter.sendMail({
     from: config.smtp.from,
     to,
     subject,
     text: text || stripHtml(html),
     html: html || autoHtmlFromText(text || '')
   });
-  return { delivered: true };
+  return {
+    delivered: true,
+    messageId: info.messageId || null,
+    accepted: Array.isArray(info.accepted) ? info.accepted : [],
+    rejected: Array.isArray(info.rejected) ? info.rejected : [],
+    pending: Array.isArray(info.pending) ? info.pending : [],
+    response: info.response || ''
+  };
 }
 
 function escapeHtml(s) {

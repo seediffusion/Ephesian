@@ -73,7 +73,10 @@ export function renderLogin(main, search) {
     ]),
     h('div', { class: 'field' }, [
       h('label', { class: 'field-label', for: 'login-password' }, ['Password']),
-      passInput
+      passInput,
+      h('div', { class: 'field-help' }, [
+        h('a', { href: '/forgot-password', 'data-link': '' }, ['Forgot your password?'])
+      ])
     ]),
     errBox,
     h('div', { class: 'form-actions' }, [

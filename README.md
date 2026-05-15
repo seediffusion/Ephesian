@@ -10,7 +10,7 @@ The name is borrowed from the New Testament Letter to the Ephesians, which  teac
 
 ## Ephesian features
 
-Ephesian is a fully-featured document collaboration tool. You can create documents, edit them together with other people in real time, see each other's cursors, share documents by email or by invite link, set a limit on how many people can be inside a single document at once, import and export Microsoft Word, HTML, Markdown, and plain text, and keep working in the browser when you lose your network connection — Ephesian syncs your changes back to the server as soon as you reconnect. Accounts are protected with argon2id password hashing, email verification, and a choice of two-factor methods including authenticator apps, security keys and passkeys, email codes, and one-time backup codes. SMS is not supported, by design.
+Ephesian is a fully-featured document collaboration tool. You can create documents, edit them together with other people in real time, see each other's cursors, share documents by email or by invite link, set a limit on how many people can be inside a single document at once, import and export Microsoft Word, HTML, Markdown, and plain text, and keep working in the browser when you lose your network connection — Ephesian syncs your changes back to the server as soon as you reconnect. Accounts are protected with argon2id password hashing, email verification, secure password reset links, and a choice of two-factor methods including authenticator apps, security keys and passkeys, email codes, and one-time backup codes. SMS is not supported, by design.
 
 ## Running Ephesian
 
@@ -58,7 +58,7 @@ The bundler rebuilds `public/dist/main.js` whenever you edit a file in `public/s
 
 ## Email setup
 
-Ephesian uses email to deliver account verification codes, second-factor codes for users who have enabled email 2FA, and invite links for people you share documents with. Configuring email is optional. If you do not configure SMTP, Ephesian prints every email to the terminal instead of sending it. This is the simplest configuration and is perfectly fine for solo or testing use — you just copy the verification code out of the terminal window.
+Ephesian uses email to deliver account verification codes, password reset links, second-factor codes for users who have enabled email 2FA, and invite links for people you share documents with. Configuring email is optional. If you do not configure SMTP, Ephesian prints every email to the terminal instead of sending it. This is the simplest configuration and is perfectly fine for solo or testing use — you just copy the verification code or reset link out of the terminal window.
 
 When you are ready to use a real provider, fill in the SMTP variables in `.env`:
 
@@ -83,6 +83,14 @@ When you open Ephesian for the first time, you will be greeted with a landing pa
 4. Ephesian sends a 6-digit verification code to your email address (or prints it to the terminal if SMTP is not configured). Enter the code in the next dialog and press Enter.
 
 After verifying your email you are dropped on the documents dashboard. From here you can create new documents, import files, and open existing ones.
+
+## Resetting a forgotten password
+
+From the sign-in page, choose "Forgot your password?", enter the email address for the account, and press Send reset link. Ephesian always shows the same response for valid-looking email addresses so account existence is not exposed. If the account exists, Ephesian sends a one-time reset link that expires after 1 hour.
+
+Opening the link lets you choose a new password. After a successful reset, all existing sessions for that account are signed out, old reset links are invalidated, and the account email is treated as verified because the reset link proves access to the registered mailbox.
+
+When SMTP is configured, reset links are sent by SMTP and are not printed to the terminal. The server log records password reset delivery diagnostics, including whether SMTP accepted or rejected the message, without logging the reset token or reset URL.
 
 ## Creating and editing documents
 
@@ -185,6 +193,9 @@ Open the `.env` file in your Ephesian folder to configure the following:
 * `SESSION_SECRET`: an HMAC key for session cookies. Generated automatically on first run.
 * `COOKIE_SECURE`: set to true when serving over HTTPS so cookies receive the Secure flag.
 * `TRUST_PROXY`: set to true when Ephesian is behind a reverse proxy that sets X-Forwarded-* headers.
+* `PASSWORD_RESET_REQUEST_IP_MAX`, `PASSWORD_RESET_REQUEST_IP_WINDOW_MS`: maximum reset-link requests per IP address in the configured window. Defaults to 10 per hour.
+* `PASSWORD_RESET_REQUEST_EMAIL_MAX`, `PASSWORD_RESET_REQUEST_EMAIL_WINDOW_MS`: maximum reset-link requests per email address in the configured window. Defaults to 5 per hour.
+* `PASSWORD_RESET_CONFIRM_IP_MAX`, `PASSWORD_RESET_CONFIRM_IP_WINDOW_MS`: maximum reset attempts per IP address in the configured window. Defaults to 20 per 15 minutes.
 * `DATABASE_PATH`: where the SQLite file lives. Default `./data/ephesian.db`.
 * `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `SMTP_FROM`: email server credentials. Leave `SMTP_HOST` blank to print emails to the terminal instead of sending them.
 * `APP_NAME`: the application name shown in the header. Default Ephesian.

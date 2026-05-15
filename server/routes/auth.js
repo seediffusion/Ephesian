@@ -14,6 +14,9 @@ import { checkRateLimit, ipOf } from '../lib/ratelimit.js';
 const router = express.Router();
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;
+const PASSWORD_RESET_TOKEN_RE = /^[A-Za-z0-9_-]{32,256}$/;
+const USER_ID_RE = /^usr_[a-f0-9]{32}$/;
 
 function userPublic(user) {
   return {
@@ -48,6 +51,91 @@ ${link}
 This code expires in 30 minutes. If you did not create an account, you can ignore this message.`
   });
 }
+
+function logAuthEmailFailure(context, err) {
+  process.stderr.write(`[auth] ${context}: ${err?.stack || err}\n`);
+}
+
+function logAuthEvent(message, fields = {}) {
+  const details = Object.entries(fields)
+    .filter(([, value]) => value !== undefined && value !== null && value !== '')
+    .map(([key, value]) => `${key}=${JSON.stringify(value)}`)
+    .join(' ');
+  process.stdout.write(`[auth] ${message}${details ? ` ${details}` : ''}\n`);
+}
+
+function deliveryFields(delivery) {
+  if (delivery?.console) return { mode: 'console' };
+  return {
+    mode: 'smtp',
+    messageId: delivery?.messageId || undefined,
+    accepted: Array.isArray(delivery?.accepted) ? delivery.accepted.length : undefined,
+    rejected: Array.isArray(delivery?.rejected) ? delivery.rejected.length : undefined,
+    pending: Array.isArray(delivery?.pending) ? delivery.pending.length : undefined,
+    response: delivery?.response || undefined
+  };
+}
+
+async function issuePasswordReset(user) {
+  const token = randomToken(32);
+  const tokenId = newId('et');
+  const now = nowMs();
+  const tokenHash = sha256(token);
+  const expiresAt = now + PASSWORD_RESET_TTL_MS;
+
+  db.prepare(
+    `UPDATE email_tokens
+        SET consumed = 1
+      WHERE user_id = ? AND purpose = 'reset_password' AND consumed = 0`
+  ).run(user.id);
+
+  db.prepare(
+    `INSERT INTO email_tokens (id, user_id, purpose, code_hash, expires_at, created_at)
+     VALUES (?, ?, 'reset_password', ?, ?, ?)`
+  ).run(tokenId, user.id, tokenHash, expiresAt, now);
+
+  const resetUrl = new URL('/reset-password', config.publicOrigin);
+  resetUrl.searchParams.set('uid', user.id);
+  resetUrl.searchParams.set('token', token);
+
+  const delivery = await sendMail({
+    to: user.email,
+    subject: `${config.appName}: reset your password`,
+    text:
+`Someone requested a password reset for your ${config.appName} account.
+
+Open this link to choose a new password:
+${resetUrl.toString()}
+
+This link expires in 1 hour and can only be used once. If you did not request this, you can ignore this message.`
+  });
+  return { delivery, expiresAt };
+}
+
+const applyPasswordReset = db.transaction((userId, tokenHash, passwordHash, now) => {
+  const row = db.prepare(
+    `SELECT et.id AS token_id, u.email
+       FROM email_tokens et
+       JOIN users u ON u.id = et.user_id
+      WHERE et.user_id = ?
+        AND et.purpose = 'reset_password'
+        AND et.code_hash = ?
+        AND et.consumed = 0
+        AND et.expires_at > ?
+        AND u.is_guest = 0`
+  ).get(userId, tokenHash, now);
+  if (!row) return null;
+
+  db.prepare('UPDATE users SET password_hash = ?, email_verified = 1 WHERE id = ?').run(passwordHash, userId);
+  db.prepare(
+    `UPDATE email_tokens
+        SET consumed = 1
+      WHERE user_id = ? AND purpose = 'reset_password' AND consumed = 0`
+  ).run(userId);
+  db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
+
+  return { email: row.email };
+});
 
 router.post('/register', express.json(), async (req, res) => {
   const rl = checkRateLimit(`register:${ipOf(req)}`, { max: 8, windowMs: 60 * 60 * 1000 });
@@ -163,6 +251,87 @@ router.post('/login', express.json(), async (req, res) => {
       webauthn: hasWebauthn
     }
   });
+});
+
+router.post('/forgot-password', express.json(), async (req, res) => {
+  const ip = ipOf(req);
+  const limits = config.passwordResetRateLimits;
+  const rl = checkRateLimit(`password-reset-request:ip:${ip}`, {
+    max: limits.requestIpMax,
+    windowMs: limits.requestIpWindowMs
+  });
+  if (!rl.allowed) return res.status(429).json({ error: 'too_many_attempts' });
+
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'invalid_email' });
+
+  const emailRl = checkRateLimit(`password-reset-request:email:${sha256(email)}`, {
+    max: limits.requestEmailMax,
+    windowMs: limits.requestEmailWindowMs
+  });
+  if (!emailRl.allowed) return res.status(429).json({ error: 'too_many_attempts' });
+
+  const user = db.prepare(
+    'SELECT id, email, display_name FROM users WHERE email = ? AND is_guest = 0'
+  ).get(email);
+  const emailHash = sha256(email).slice(0, 12);
+  if (user) {
+    try {
+      const { delivery } = await issuePasswordReset(user);
+      logAuthEvent('password reset email handled', {
+        emailHash,
+        userId: user.id,
+        ...deliveryFields(delivery)
+      });
+    } catch (err) {
+      logAuthEmailFailure(`password reset email failed emailHash=${emailHash}`, err);
+    }
+  } else {
+    logAuthEvent('password reset request accepted without matching account', { emailHash });
+  }
+
+  res.json({ ok: true });
+});
+
+router.post('/reset-password', express.json(), async (req, res) => {
+  const limits = config.passwordResetRateLimits;
+  const rl = checkRateLimit(`password-reset-confirm:${ipOf(req)}`, {
+    max: limits.confirmIpMax,
+    windowMs: limits.confirmIpWindowMs
+  });
+  if (!rl.allowed) return res.status(429).json({ error: 'too_many_attempts' });
+
+  const userId = String(req.body?.userId || '').trim();
+  const token = String(req.body?.token || '').trim();
+  const password = req.body?.password;
+  if (!USER_ID_RE.test(userId) || !PASSWORD_RESET_TOKEN_RE.test(token)) {
+    return res.status(400).json({ error: 'invalid_or_expired' });
+  }
+
+  const issues = passwordStrengthIssues(password);
+  if (issues.length) return res.status(400).json({ error: 'weak_password', issues });
+
+  let hash;
+  try {
+    hash = await hashPassword(password);
+  } catch (err) {
+    return res.status(400).json({ error: 'weak_password', issues: [err.message] });
+  }
+
+  const resetUser = applyPasswordReset(userId, sha256(token), hash, nowMs());
+  if (!resetUser) return res.status(400).json({ error: 'invalid_or_expired' });
+
+  clearSessionCookie(res);
+  res.json({ ok: true });
+
+  sendMail({
+    to: resetUser.email,
+    subject: `${config.appName}: your password was changed`,
+    text:
+`Your ${config.appName} password was changed.
+
+If you made this change, no further action is needed. If you did not change your password, reset it again immediately and review access to your email account.`
+  }).catch(err => logAuthEmailFailure('password reset notification failed', err));
 });
 
 router.post('/logout', (req, res) => {
