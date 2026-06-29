@@ -6,7 +6,7 @@ Ephesian is a Google-Docs-style platform you can run on your own machine or serv
 
 ## Why "Ephesian"?
 
-The name is borrowed from the New Testament Letter to the Ephesians, which  teaches unity of the Jews and the Gentiles (non-Jews) through Jesus Christ. The project has nothing to do with religion; the theme is simply that a collaboration tool aims to unify everyone around a shared project idea.
+The name is borrowed from the Bible. It is a reference to the New Testament's Letter to the Ephesians. The theme is  that a collaberation tool like this aims to unify everyone around a shared project idea, while the Book of Ephesians teaches that Jews and Gentiles (Non-Jews) are to be unified through Jesus Christ.
 
 ## Ephesian features
 
