@@ -158,7 +158,29 @@ export class CollabSession {
         Collaboration.configure({ document: this.ydoc }),
         CollaborationCursor.configure({
           provider: { awareness: this.awareness },
-          user: { name: this.user.displayName || this.user.email, color: colorFor(this.user.id) }
+          user: { name: this.user.displayName || this.user.email, color: colorFor(this.user.id) },
+          // The caret + name label are widget decorations injected *inside* the
+          // contenteditable at the remote collaborator's cursor position. Without
+          // this, the label's text leaks into the document's accessible text and a
+          // screen reader reads a stray collaborator initial at the caret. Mark the
+          // whole widget aria-hidden (and non-editable) so it stays a purely visual
+          // presence cue — presence is announced accessibly via the collaborators
+          // live region and list instead.
+          render: (user) => {
+            const cursor = document.createElement('span');
+            cursor.classList.add('collaboration-cursor__caret');
+            cursor.setAttribute('style', `border-color: ${user.color}`);
+            cursor.setAttribute('aria-hidden', 'true');
+            cursor.setAttribute('contenteditable', 'false');
+
+            const label = document.createElement('div');
+            label.classList.add('collaboration-cursor__label');
+            label.setAttribute('style', `background-color: ${user.color}`);
+            label.textContent = user.name;
+
+            cursor.appendChild(label);
+            return cursor;
+          }
         })
       ]
     });
