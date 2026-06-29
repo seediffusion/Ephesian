@@ -66,7 +66,7 @@ function autoHtmlFromText(text) {
     .join('\n');
   return [
     '<!doctype html>',
-    '<html lang="en"><head><meta charset="utf-8"></head>',
+    `<html lang="en"><head><meta charset="utf-8"><title>${escapeHtml(config.appName)}</title></head>`,
     '<body style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;',
     'font-size:15px;line-height:1.55;color:#15171c;max-width:36rem;margin:1.5rem auto;padding:0 1rem;">',
     body,

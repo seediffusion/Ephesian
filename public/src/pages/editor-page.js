@@ -131,9 +131,15 @@ export async function renderEditorPage(main, params) {
   const roleTag = h('span', { class: 'tag' }, [activeRole.charAt(0).toUpperCase() + activeRole.slice(1)]);
   shell.appendChild(h('div', { class: 'editor-meta' }, [
     backBtn, titleInput,
+    // Force a flex line break here so the title input keeps the full row width and
+    // is never squeezed or clipped by the status text, presence, and action buttons.
+    // Everything after the break flows onto the next visual line. Kept in one
+    // container (rather than a second grid row) so the shell grid and the a11y
+    // reading/tab order are unchanged.
+    h('div', { class: 'meta-break', 'aria-hidden': 'true' }),
     roleTag,
     status,
-    h('div', { style: { flex: '1' }, 'aria-hidden': 'true' }),
+    h('div', { class: 'meta-spacer', 'aria-hidden': 'true' }),
     presenceWrap,
     importBtn, exportBtn, shareBtn
   ].filter(Boolean)));
@@ -614,7 +620,7 @@ function openExportMenu(doc) {
     title: `Export "${doc.title}"`,
     body: h('div', {}, [
       h('p', { class: 'field-help' }, ['Choose a download format. Your current document is sent to the server for conversion.']),
-      h('ul', { class: 'list-reset', style: { display: 'grid', gap: '0.5rem' } }, formats.map(f =>
+      h('ul', { role: 'list', class: 'list-reset', style: { display: 'grid', gap: '0.5rem' } }, formats.map(f =>
         h('li', {}, [
           h('button', {
             type: 'button',
@@ -757,7 +763,7 @@ async function openShareDialog(doc) {
 
   // ---- People list ----
   const peopleListId = nextId('share-people');
-  const list = h('ul', { class: 'share-list', 'aria-labelledby': peopleListId });
+  const list = h('ul', { role: 'list', class: 'share-list', 'aria-labelledby': peopleListId });
   for (const s of data.shares) {
     const name = s.display_name || s.email;
     const effectiveRole = s.effective_role || s.role;
@@ -768,11 +774,15 @@ async function openShareDialog(doc) {
 
     if (canGrantModeration && effectiveRole === 'editor') {
       const modId = nextId('moderator-grant');
+      const modHelpId = nextId('moderator-grant-help');
       const modToggle = h('input', {
         type: 'checkbox',
         id: modId,
         checked: !!s.can_moderate,
-        'aria-label': `Allow ${name} to remove users or make editors temporary viewers`
+        // Accessible name comes from the visible <label> ("Special permissions") so
+        // it matches what sighted and speech-input users see (WCAG 2.5.3 Label in
+        // Name). The longer, person-specific explanation is exposed as a description.
+        'aria-describedby': modHelpId
       });
       modToggle.addEventListener('change', async () => {
         try {
@@ -791,7 +801,10 @@ async function openShareDialog(doc) {
       });
       actions.push(h('span', { class: 'permission-toggle' }, [
         modToggle,
-        h('label', { for: modId }, ['Special permissions'])
+        h('label', { for: modId }, ['Special permissions']),
+        h('span', { id: modHelpId, class: 'sr-only' }, [
+          `Allow ${name} to remove users or make editors temporary viewers`
+        ])
       ]));
     }
 
@@ -799,14 +812,14 @@ async function openShareDialog(doc) {
       actions.push(h('button', {
         type: 'button',
         class: 'btn btn-sm',
-        'aria-label': `Remove ${name} temporarily`,
+        'aria-label': `Remove temporarily — ${name}`,
         onclick: () => openTemporaryActionDialog(doc, s, 'kick', rebuild)
       }, ['Remove temporarily']));
       if (s.role === 'editor') {
         actions.push(h('button', {
           type: 'button',
           class: 'btn btn-sm',
-          'aria-label': `Make ${name} a temporary viewer`,
+          'aria-label': `Make viewer temporarily — ${name}`,
           onclick: () => openTemporaryActionDialog(doc, s, 'viewer', rebuild)
         }, ['Make viewer temporarily']));
       }
@@ -816,7 +829,7 @@ async function openShareDialog(doc) {
       actions.push(h('button', {
         type: 'button',
         class: 'btn btn-sm',
-        'aria-label': `Clear temporary restriction for ${name}`,
+        'aria-label': `Clear restriction for ${name}`,
         onclick: async () => {
           await api('/api/documents/' + doc.id + '/moderation/' + s.user_id, { method: 'DELETE' });
           toast('Temporary restriction cleared.', 'success');
@@ -921,7 +934,7 @@ async function openShareDialog(doc) {
 
   // ---- Invite links ----
   const linksListId = nextId('invite-links');
-  const linksList = h('ul', { class: 'share-list', 'aria-labelledby': linksListId });
+  const linksList = h('ul', { role: 'list', class: 'share-list', 'aria-labelledby': linksListId });
   for (const l of data.invites) {
     const isExpired = l.expires_at && l.expires_at < Date.now();
     const status = l.revoked ? 'Revoked' : isExpired ? 'Expired'

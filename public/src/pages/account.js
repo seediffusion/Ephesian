@@ -141,7 +141,7 @@ async function renderTwoFA(container, user) {
     'Add additional factors so a stolen password is not enough to sign in. SMS is intentionally not supported.'
   ]));
 
-  const list = h('ul', { class: 'list-reset', 'aria-label': 'Second-factor methods' });
+  const list = h('ul', { role: 'list', class: 'list-reset', 'aria-label': 'Second-factor methods' });
   container.appendChild(list);
 
   const factors = user.twoFactor;
@@ -345,7 +345,7 @@ function askDeviceName() {
 
 async function manageWebauthn(onDone) {
   const data = await api('/api/2fa/webauthn/credentials');
-  const list = h('ul', { class: 'share-list', 'aria-label': 'Registered security keys' });
+  const list = h('ul', { role: 'list', class: 'share-list', 'aria-label': 'Registered security keys' });
   if (!data.credentials.length) {
     list.appendChild(h('li', {}, [h('em', {}, ['No registered keys yet.'])]));
   }
@@ -399,6 +399,7 @@ function showBackupCodes(codes) {
     body: h('div', {}, [
       h('p', {}, ['Each code can be used once. Print or store them somewhere safe.']),
       h('ul', {
+        role: 'list',
         class: 'backup-codes list-reset',
         'aria-label': 'Backup codes'
       }, codes.map(c => h('li', { class: 'code-blob' }, [c]))),

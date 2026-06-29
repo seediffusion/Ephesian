@@ -39,6 +39,7 @@ export async function renderDashboard(main) {
   const gridHeadingId = nextId('docgrid');
   root.appendChild(h('h2', { id: gridHeadingId, class: 'sr-only' }, ['Documents list']));
   const grid = h('ul', {
+    role: 'list',
     class: 'doc-grid list-reset',
     'aria-labelledby': gridHeadingId
   });

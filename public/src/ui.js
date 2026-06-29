@@ -106,7 +106,7 @@ function focusableIn(root) {
     .filter(el => !el.hasAttribute('inert') && el.offsetParent !== null);
 }
 
-export function openModal({ title, body, footer, onClose, describedBy, initialFocus } = {}) {
+export function openModal({ title, body, footer, onClose, describedBy, initialFocus, role = 'dialog' } = {}) {
   const root = document.getElementById('modal-root');
   const titleId = nextId('modal-title');
   const descId = nextId('modal-desc');
@@ -128,7 +128,7 @@ export function openModal({ title, body, footer, onClose, describedBy, initialFo
 
   const dialogAttrs = {
     class: 'modal',
-    role: 'dialog',
+    role,
     'aria-modal': 'true',
     'aria-labelledby': titleId,
     tabindex: '-1'
@@ -224,6 +224,9 @@ export function confirm(title, message, { confirmLabel = 'Confirm', kind = 'prim
     }, ['Cancel']);
     const m = openModal({
       title,
+      // alertdialog so the confirmation message (aria-describedby) is announced on
+      // open — these are all destructive/irreversible prompts.
+      role: 'alertdialog',
       body: h('p', { id: messageId }, [message]),
       describedBy: messageId,
       footer: [cancel, ok],
